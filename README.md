@@ -57,6 +57,10 @@ kubectl apply -f manifests/chi.yaml
   선형 백프레셔를 강제로 재현
 - 무중단 스키마 변경 — `ADD`/`MODIFY COLUMN`은 부하 중에도 무중단이지만,
   `Distributed` 테이블은 별도로 ALTER해야 한다는 함정 확인
+- INSERT 멱등성/중복제거 — `insert_deduplicate`가 `Distributed` 테이블을
+  거치면 작동하지 않는다는 함정 확인 (Kafka 재처리 중복 문제의 근본 원인 규명)
+- Projection으로 쿼리 가속 — 자동 선택 확인, `Distributed` 테이블은
+  `ADD COLUMN`과 달리 별도 조치 없이도 투명하게 혜택을 받는다는 것 확인
 
 자세한 명령어와 결과는 [GUIDE.md](./GUIDE.md)에 정리돼 있습니다.
 

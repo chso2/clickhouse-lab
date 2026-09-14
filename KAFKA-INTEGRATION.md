@@ -170,6 +170,17 @@ event_id=3  after-bad-message  (2026-09-11 02:17:19)  ← 이번에 처음 성�
 이어지지 않게 해야 합니다 — 우리 `push_click.customers_local`이 이미
 `ReplacingMergeTree`를 쓰는 이유이기도 합니다(GUIDE.md/앱 스키마 참고).
 
+> **후속 검증 (GUIDE.md 23절)**: 왜 이 테이블에서 중복이 걸러지지 않았는지
+> 나중에 정확히 확인했습니다 — ClickHouse의 INSERT 블록 중복 제거
+> (`insert_deduplicate`, 완전히 동일한 재시도를 자동으로 걸러주는 기능)는
+> **`ReplicatedMergeTree` 계열에만 기본 적용**되고, 이 실험의 `events`
+> 테이블처럼 일반(비복제) `MergeTree`는 `non_replicated_deduplication_window`가
+> 기본값 0(비활성)이라 애초에 이 보호 장치가 꺼져 있었습니다. 게다가 설령
+> `ReplicatedMergeTree`였더라도, **`Distributed` 테이블을 거쳐 삽입했다면
+> 어차피 중복 제거가 작동하지 않았을 것**이라는 것도 GUIDE.md 23-4절에서
+> 별도로 확인했습니다 — 샤딩 키가 매 시도마다 재계산되어 물리적 블록 내용이
+> 달라지기 때문입니다.
+
 ## `system.kafka_consumers`로 확인할 수 있는 것들
 
 이번 실험에서 실제로 유용했던 컬럼들:

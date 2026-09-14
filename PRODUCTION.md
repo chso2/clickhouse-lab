@@ -88,6 +88,14 @@ GUIDE.md가 "이 랩을 어떻게 다시 만드는가"를 다룬다면, 이 문�
   테이블은 `OPTIMIZE ... FINAL`조차 "이미 최적화됨"으로 건너뛸 수 있으니
   이런 테이블의 TTL/정리는 `MATERIALIZE TTL`로 명시적으로 강제하는 걸
   권장합니다.
+- **비정렬 컬럼으로 자주 필터링한다면 `Projection`을 검토하세요.** `ORDER BY`
+  키를 사후에 바꾸는 건 테이블 재작성급 비용이지만, `ADD PROJECTION` +
+  `MATERIALIZE PROJECTION`으로 특정 쿼리 패턴만 골라 가속할 수 있습니다
+  (GUIDE.md 24절 실측: 그래뉼 스캔 153→5, 약 30배 감소, 결과값 동일).
+  `Distributed` 테이블은 `ADD COLUMN`(22절)과 달리 별도 ALTER 없이도
+  투명하게 그 혜택을 받습니다. 다만 원본 컬럼을 그대로 재정렬하는
+  프로젝션은 디스크 사용량을 최대 2배로 늘릴 수 있으니 사전에
+  `system.projection_parts`로 확인하세요.
 - **TTL 정리 속도는 "그 테이블에 병합이 얼마나 자주 도는가"에 정비례합니다.**
   같은 TTL 설정이라도 배경 병합이 인위적으로 멈춰있거나 삽입이 뜸한 테이블
   (위 GUIDE.md 16절 사례)은 만료된 데이터가 수십 분 이상 남아있을 수 있는
@@ -122,7 +130,18 @@ INSERT는 최소 1개의 파트를 만들고, 파트가 너무 많아지면 서�
    병합이 지속적으로 밀린다면(`system.parts`의 활성 파트 수가 계속 증가) 여전히
    튜닝 대상입니다 — GUIDE.md 12절의 "Parts by State" 패널로 이 추세를
    상시 관찰하세요.
-4. **백프레셔는 조용히 시작해서 점점 커집니다**: `parts_to_delay_insert`를
+4. **`insert_deduplicate`(기본 켜짐, `ReplicatedMergeTree` 전용)로 재시도 INSERT의
+   완전 중복을 자동 방지**할 수 있지만, 두 가지 조건을 반드시 확인하세요
+   (GUIDE.md 23절 실측):
+   - **일반(비복제) `MergeTree`는 이 보호가 기본적으로 꺼져 있습니다**
+     (`non_replicated_deduplication_window` 기본값 0).
+   - **`Distributed` 테이블을 거쳐 INSERT하면 애초에 작동하지 않습니다** —
+     샤딩 키가 매 시도마다 재계산되어 물리적 블록이 달라지기 때문입니다.
+     재시도 로직이 있는 파이프라인(HTTP 재시도, 메시지 큐 재처리 등)이라면
+     대상이 `ReplicatedMergeTree`이면서 **로컬 샤드에 직접 쓰는 경로**인지
+     먼저 확인하고, 아니라면 자연 키 + `ReplacingMergeTree`(또는
+     애플리케이션 레벨 dedup)를 1차 방어선으로 두세요.
+5. **백프레셔는 조용히 시작해서 점점 커집니다**: `parts_to_delay_insert`를
    넘어서면 INSERT가 즉시 실패하는 게 아니라 파트 수에 **선형 비례**해 점점
    느려지다가(GUIDE.md 21절 실측: 5→10개 파트 구간에서 0.73→3.13초로 증가)
    `parts_to_throw_insert`에서야 완전히 거부됩니다. 즉 `TOO_MANY_PARTS`

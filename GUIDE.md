@@ -1751,7 +1751,172 @@ MODIFY COLUMN val LowCardinality(String)
 
 ---
 
-## 23. 정리
+## 23. INSERT 멱등성/중복제거
+
+`ReplicatedMergeTree`는 `insert_deduplicate`(기본값 1, 켜짐) 설정으로 **완전히 동일한
+INSERT 블록**을 자동으로 걸러냅니다. 클라이언트가 타임아웃 후 같은 INSERT를 재시도하는
+흔한 상황에서 중복이 생기지 않게 해주는 안전장치인데, 정확히 어떤 조건에서 얼마나
+믿을 수 있는지 직접 검증했습니다. KAFKA-INTEGRATION.md의 "컨슈머 그룹을 바꾸면
+재처리되어 중복이 생긴다"는 발견과도 직결되는 실험입니다.
+
+### 23-1. 완전히 동일한 블록은 자동으로 걸러진다
+
+```sql
+CREATE TABLE dedup_test_local ON CLUSTER 'cluster1' (id UInt64, val String)
+ENGINE = ReplicatedMergeTree('/clickhouse/tables/{shard}/dedup_test_local', '{replica}')
+ORDER BY id
+SETTINGS replicated_deduplication_window = 3;
+
+INSERT INTO dedup_test_local VALUES (1,'a'),(2,'b'),(3,'c');
+INSERT INTO dedup_test_local VALUES (1,'a'),(2,'b'),(3,'c');  -- 완전히 동일한 재시도
+SELECT count() FROM dedup_test_local;  -- 6이 아니라 3
+```
+
+두 번째 INSERT는 조용히 무시되고 행 수는 3 그대로였습니다.
+
+### 23-2. `replicated_deduplication_window`은 생각보다 훨씬 관대했다
+
+`replicated_deduplication_window=3`으로 낮게 잡아뒀으니, 서로 다른 블록을 3~4개만
+더 끼워 넣으면 원래 블록의 해시가 밀려나 재시도가 "새 데이터"로 다시 들어갈 거라
+예상했습니다. 실제로는:
+
+- 서로 다른 블록 4개(`100,101,102,103`)를 끼워 넣은 뒤 원래 블록을 재삽입 →
+  **여전히 걸러짐**(`id=1`이 여전히 1건).
+- 서로 다른 블록을 **20개 더**(총 24개 개입) 끼워 넣은 뒤 재시도해도 →
+  **여전히 걸러짐**.
+- Keeper의 `/clickhouse/tables/{shard}/dedup_test_local/deduplication_hashes`
+  znode를 직접 조회하면 설정한 3개 근처의 항목만 보이는데도, 실제 중복 판정은
+  훨씬 오래 유지됐습니다 — 정리(cleanup)가 설정값만큼 즉시/동기적으로 일어나지
+  않고 지연되는 것으로 보입니다.
+
+**실무적으로는 오히려 좋은 소식입니다**: `replicated_deduplication_window`을 작게
+잡아도, 설정값이 암시하는 것보다 실제 보호 구간이 더 넓을 수 있습니다. 다만 이는
+내부 정리 스케줄에 의존하는 동작이라 **보장된 값으로 설계에 반영하면 안 되고**,
+정확한 중복 방지가 필요하다면 여전히 애플리케이션 레벨의 멱등 키(비즈니스
+유니크 키 + `ReplacingMergeTree`)를 1차 방어선으로 둬야 합니다.
+
+### 23-3. `insert_deduplicate=0`으로 끄면 바로 중복이 쌓인다 (대조군)
+
+```sql
+INSERT INTO dedup_test_local SETTINGS insert_deduplicate=0 VALUES (1,'a'),(2,'b'),(3,'c');
+SELECT id, count() FROM dedup_test_local WHERE id=1 GROUP BY id;  -- 2
+```
+
+### 23-4. 핵심 함정: `Distributed` 테이블을 거치면 중복 방지가 깨진다
+
+같은 실험을 로컬 테이블이 아니라 `Distributed` 테이블로 반복하면 결과가 다릅니다.
+
+```sql
+INSERT INTO dedup_test VALUES (500,'p'),(501,'q');
+INSERT INTO dedup_test VALUES (500,'p'),(501,'q');  -- 완전히 동일한 재시도
+SELECT id, count() FROM dedup_test WHERE id IN (500,501) GROUP BY id;  -- 둘 다 2
+```
+
+**로컬 테이블에 직접 넣을 때는 걸러지던 것과 정반대로, `Distributed` 테이블을 거치면
+완전히 동일한 INSERT 문도 그대로 중복 삽입됩니다.** `Distributed` 엔진이 각 행을
+샤딩 키(`rand()`)로 매 시도마다 새로 재계산해 샤드별로 쪼개기 때문에, "논리적으로
+동일한" INSERT라도 실제 각 샤드가 받는 물리적 블록 내용이 시도마다 달라질 수 있어
+블록 해시 기반 중복 판정이 작동하지 않는 것으로 보입니다.
+
+이 발견은 KAFKA-INTEGRATION.md에서 "컨슈머 그룹 변경 → 재처리 → 중복"을 관찰했던
+이유도 명확히 설명합니다 — 그 실험의 `kafka_demo.events`는 **일반 `MergeTree`**였고
+(`ReplicatedMergeTree`가 아님), `insert_deduplicate`가 의미를 갖는 건 Replicated
+계열뿐입니다(비복제 테이블은 `non_replicated_deduplication_window`가 **기본값 0 =
+비활성**). 즉 그 실험에서 중복이 발생한 건 단순히 "일반 MergeTree는 애초에 이
+보호 장치가 꺼져 있었다"는 것으로 정확히 설명됩니다.
+
+### 23-5. 핵심 정리
+
+| 경로 | 완전히 동일한 재시도 결과 |
+|---|---|
+| `ReplicatedMergeTree` 로컬 테이블 직접 INSERT | 자동으로 걸러짐(기본값) |
+| `insert_deduplicate=0` | 걸러지지 않고 중복 쌓임 |
+| `Distributed` 테이블 경유 INSERT | **걸러지지 않음** — 샤딩 키 재계산으로 블록이 매번 달라짐 |
+| 일반(비복제) `MergeTree` | 기본적으로 중복 방지 자체가 꺼져 있음 |
+
+**운영 함의**: INSERT 재시도 로직을 가진 애플리케이션/파이프라인(HTTP 클라이언트
+타임아웃 재시도, Kafka 컨슈머 재처리 등)이 있다면, (1) 대상 테이블이 실제로
+`ReplicatedMergeTree` 계열인지, (2) **`Distributed` 테이블을 거치지 않고 직접
+로컬 샤드에 쓰는 경로인지**를 먼저 확인하세요. 둘 중 하나라도 아니면 블록 단위
+중복 방지는 작동하지 않으므로, 자연 키 + `ReplacingMergeTree`(또는 애플리케이션
+레벨 dedup)가 필수입니다.
+
+---
+
+## 24. Projection으로 쿼리 가속
+
+`ALTER TABLE ... ADD PROJECTION`은 원본 테이블과 다른 정렬/집계 순서를 자동으로
+유지해주는 내장 인덱스입니다. `ORDER BY id`인 테이블에서 `id`가 아닌 다른 컬럼으로
+자주 필터링한다면 얼마나 도움이 되는지, 그리고 `Distributed` 테이블과의 관계(22절의
+`ADD COLUMN` 함정과 같은 문제가 있는지)를 확인했습니다.
+
+### 24-1. Projection 없이: 필터 컬럼이 정렬 키가 아니면 풀스캔
+
+```sql
+CREATE TABLE proj_test_local ON CLUSTER 'cluster1'
+(id UInt64, category LowCardinality(String), region LowCardinality(String), amount Float64)
+ENGINE = ReplicatedMergeTree(...) ORDER BY id;
+-- 500만 행 적재 (region은 4개 값 균등 분포)
+
+EXPLAIN indexes=1 SELECT region, sum(amount), count() FROM proj_test_local WHERE region='kr' GROUP BY region
+```
+```
+ReadFromMergeTree (default.proj_test_local)
+  Parts: 5 | Granules: 153
+  Indexes: PrimaryKey Condition: true, Parts: 5/5, Granules: 153/153   -- 전혀 걸러지지 않음(풀스캔)
+```
+
+### 24-2. Projection 추가 + 백필
+
+```sql
+ALTER TABLE proj_test_local ON CLUSTER 'cluster1' ADD PROJECTION region_agg (
+    SELECT region, sum(amount), count() GROUP BY region
+);
+-- 기존에 이미 쌓여있던 데이터에도 적용되도록 백필(신규 INSERT는 자동 유지되지만
+-- 과거 데이터는 명시적으로 MATERIALIZE해야 함)
+ALTER TABLE proj_test_local ON CLUSTER 'cluster1' MATERIALIZE PROJECTION region_agg;
+```
+
+### 24-3. 결과: 동일 쿼리가 자동으로 프로젝션을 골라 씀
+
+```
+Filter
+  Filter column: region = 'kr'
+  ReadFromMergeTree (region_agg)          -- 원본이 아니라 프로젝션에서 읽음
+    Parts: 5 | Granules: 5                -- 153 -> 5, 약 30배 감소
+    Indexes: PrimaryKey Keys: region, Condition: (region in ['kr','kr'])
+```
+결과값(`18334.46..., 312302`)은 프로젝션 적용 전후로 **정확히 동일** — 속도만
+빨라졌을 뿐 정확성은 그대로입니다. 쿼리를 바꾸지 않아도 옵티마이저가 자동으로
+더 저렴한 프로젝션을 선택했습니다.
+
+### 24-4. `Distributed` 테이블과의 관계: `ADD COLUMN`과 다르다
+
+22절에서는 `_local` 테이블에 `ADD COLUMN`을 해도 `Distributed` 테이블은 별도로
+ALTER하지 않으면 그 컬럼을 아예 모른다는(하드 에러) 함정을 발견했습니다. Projection은
+**정반대**입니다 — Projection은 컬럼처럼 "보이는 스키마"가 아니라 각 로컬 테이블
+내부의 저장 방식/인덱스일 뿐이라, `_local ON CLUSTER`에만 추가하면 `Distributed`
+테이블 쪽은 아무 조치 없이도 그 로컬 테이블로 라우팅될 때 자동으로 프로젝션을 씁니다.
+`Distributed` 테이블로 같은 쿼리를 실행해 각 샤드가 프로젝션 기반으로 빠르게 답하고
+합산되는 것을 확인했습니다(추가 ALTER 불필요).
+
+### 24-5. 핵심 정리
+
+| 항목 | 결과 |
+|---|---|
+| Projection 없이 비정렬 컬럼 필터 | 전체 파트/그래뉼 스캔 (153/153) |
+| Projection 추가 + `MATERIALIZE` 후 | 옵티마이저가 자동 선택, 30배 적은 그래뉼 스캔, 결과는 동일 |
+| 기존 데이터 반영 | 자동 안 됨 — `MATERIALIZE PROJECTION`으로 명시적 백필 필요 |
+| `Distributed` 테이블과의 관계 | `ADD COLUMN`과 달리 **별도 조치 불필요** — 로컬 테이블 변경만으로 투명하게 적용됨 |
+
+**주의**: Projection은 원본 데이터를 한 번 더(다른 정렬로) 저장하므로 **디스크
+사용량이 늘어납니다**(집계 프로젝션은 원본보다 훨씬 작을 수 있지만, 원본 컬럼을
+그대로 재정렬하는 프로젝션은 테이블 크기를 사실상 2배로 만들 수 있음) — 추가하기
+전에 `system.projection_parts`로 실제 증가량을 확인하세요.
+
+---
+
+## 25. 정리
 
 ```bash
 kubectl --context kind-clickhouse-lab -n clickhouse delete -f manifests/minio.yaml
