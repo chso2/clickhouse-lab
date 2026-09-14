@@ -23,7 +23,7 @@
 | 5 | PodDisruptionBudget | ✅ | Altinity 오퍼레이터가 `chi-chi-cluster1`, `chk-chk-keeper` 두 개를 **자동 생성**(`maxUnavailable=1`) — 별도 조치 불필요, 뜻밖의 합격 |
 | 6 | `max_memory_usage` 기본 프로파일 상한 | ❌ | `0`(무제한), 컴파일드 기본값 그대로(`changed=0`) — 안전 상한이 설정되어 있지 않음 |
 | 7 | `max_server_memory_usage_to_ram_ratio` | ⚠️ | `0.9`(기본값 그대로) — PRODUCTION.md 5절에서 권장한 공유 호스트용 `0.8`보다 높음 |
-| 8 | `async_insert` / `wait_for_async_insert` | ℹ️ | **둘 다 이미 `1`** — 그런데 `changed=0`(순정 기본값)으로 나타남. 이는 우리가 껐다 켠 게 아니라, 이 빌드(`26.9.1-testing`, `:head` 태그로 받은 nightly)의 **컴파일드 기본값 자체가 이미 async_insert=on**이라는 뜻으로 보임 — PRODUCTION.md 4절에서 인용한 "async_insert는 기본 꺼짐"이라는 공식 문서 서술과 배치되는 흥미로운 발견 (버전/빌드에 따른 기본값 차이일 가능성, 추가 확인 필요) |
+| 8 | `async_insert` / `wait_for_async_insert` | ℹ️ | **둘 다 이미 `1`** — `changed=0`(순정 기본값). **(2026-09-14 재확인 완료, 아래 참고)** 우리가 켠 게 아니라 실제로 최근 버전의 컴파일드 기본값이 바뀐 것이었음 — [PR #97590](https://github.com/ClickHouse/ClickHouse/pull/97590)에서 `26.3.1.377`(및 `26.2.4.17`로 백포트)부터 `async_insert` 기본값이 `1`로 변경됨. PRODUCTION.md 4절이 인용했던 "async_insert는 기본 꺼짐"이라는 서술은 **이 변경 이전 버전 기준의 구식 서술**이었음 — PRODUCTION.md도 갱신함 |
 | 9 | `parts_to_delay_insert` / `parts_to_throw_insert` | ✅ | 1000 / 3000, 문서 기본값과 일치, 커스터마이즈되지 않음(현재 랩 규모에선 무관) |
 | 10 | 기본 사용자 비밀번호 | ❌ | `default` 사용자가 **빈 비밀번호**로 인증 성공(`clickhouse-client --password=`로 확인) — PRODUCTION.md 10절에서 경고한 상태 그대로 |
 | 11 | 백업 | ❌ | `system.backups` 0건 — `BACKUP`/`RESTORE` 실행 이력이 전혀 없음. 실험 데이터라 백업 대상은 아니었지만, 실제 프로덕션이었다면 치명적 공백 |
@@ -49,10 +49,14 @@
 - Prometheus 알람 규칙 없음 (관측은 가능하나 자동 알림 체계 없음)
 - `max_memory_usage` 안전 상한 미설정 (쿼리 하나가 서버 메모리를 무제한 사용 가능)
 
-### 추가 확인이 필요한 발견
-- `async_insert`/`wait_for_async_insert`가 이미 `1`로 켜져 있는데 `changed=0`으로 보고됨 —
-  이 랩에서 쓰는 `:head` 빌드(`26.9.1-testing`)의 컴파일드 기본값 자체가 최근 바뀐 것인지,
-  아니면 다른 경로(빌드 플래그 등)로 주입된 것인지는 별도로 확인이 필요함.
+### 해소된 발견 (2026-09-14 재확인)
+- `async_insert`/`wait_for_async_insert`가 이미 `1`로 켜져 있는데 `changed=0`으로 보고된 건
+  이 랩의 `:head`(nightly) 빌드만의 특이 현상이 아니라 **실제 공식 기본값 변경**이었습니다.
+  [PR #97590](https://github.com/ClickHouse/ClickHouse/pull/97590)에서 `26.3.1.377`부터
+  (그리고 `26.2.4.17`로 백포트되어) `async_insert` 기본값이 `0`→`1`로 바뀌었습니다. 별도로
+  Docker Hub의 **최신 정식 stable 릴리스**(`clickhouse/clickhouse-server:26.8.3.105`, 2026-09-13
+  출시, `:head`가 아닌 고정 태그)를 독립적으로 띄워 직접 확인해도 동일하게 `default=1`이었습니다
+  — nightly 빌드만의 문제가 아니라 현재 stable 라인 전체의 실제 기본값입니다.
 
 ---
 

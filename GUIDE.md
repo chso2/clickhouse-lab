@@ -999,6 +999,14 @@ kubectl --context kind-clickhouse-lab -n clickhouse exec chi-chi-cluster1-0-0-0 
 # => 13004 (유실 없음)
 ```
 
+> **최신성 참고 (2026-09-14)**: 이 실험 이후 `manifests/chi.yaml`의 이미지 태그가
+> `:head`(nightly, 계속 흘러가는 태그)로 남아있습니다. `:head`는 이후 계속 새
+> 빌드를 받아왔고(지금 이 클러스터는 `26.9.1.872`), 이는 PRODUCTION.md
+> 체크리스트가 명시적으로 금지하는 "`:head`/`:latest`로 프로덕션 운영 금지"
+> 원칙을 이 랩 자신의 매니페스트가 어기고 있는 셈입니다. 재현 시에는 그 시점의
+> 최신 stable 태그(예: 이 글 작성 시점 기준 `26.8.3.105`, GitHub Releases에서
+> 확인 — `:head`가 아닌 고정 버전)로 바꿔서 배포하는 걸 권장합니다.
+
 ### 13-3. ⚠️ 가용성 프로브 방법론에 대한 교훈
 
 롤아웃 동안 `kubectl port-forward svc/clickhouse-chi 18123:8123`를 열어두고 1초마다
@@ -1468,8 +1476,15 @@ args: [server, /data, --console-address, ":9090"]
 ```
 
 > **겪은 함정**: `minio/minio:latest`(Docker Hub)가 `pull access denied`로 실패했습니다.
-> MinIO는 Docker Hub 배포를 중단하고 `quay.io/minio/minio`로 옮겨갔습니다 — 예전
-> 튜토리얼/문서의 `docker.io/minio/minio` 이미지 경로는 이제 안 됩니다.
+> 처음엔 단순히 "Docker Hub 배포를 접고 `quay.io`로 이전했다"고만 기록했는데,
+> **2026-09-14 재확인 결과 훨씬 심각한 상황**이었습니다 — MinIO는 2026-04-25에
+> GitHub 저장소 자체를 **archived(유지보수 종료) 처리**했고, Docker Hub 이미지
+> 제거는 그 결과물 중 하나일 뿐입니다. Community Edition은 이제 신규 릴리스/
+> 보안 패치가 나오지 않고, 회사는 유료 상용 제품("AIStor")으로 사용자를 유도하는
+> 중입니다. **이 랩에서는 "재해복구 실습용 S3 목적지"라는 국한된 용도로만 계속
+> 쓰지만, 실제 프로덕션 백업 목적지로는 진짜 클라우드 S3(또는 여전히 활발히
+> 유지보수되는 다른 S3 호환 스토리지)를 쓰고, 이미 MinIO를 쓰고 있다면 이관
+> 계획을 세우세요.**
 
 ```bash
 kubectl --context kind-clickhouse-lab apply -f manifests/minio.yaml

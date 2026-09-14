@@ -123,7 +123,11 @@ INSERT는 최소 1개의 파트를 만들고, 파트가 너무 많아지면 서�
    여러 소스의 INSERT를 모아 하나의 파트로 합쳐줍니다. `wait_for_async_insert=0`
    은 클라이언트가 실제 반영 전에 리턴받아 **에러를 조용히 삼킬 수 있어
    위험**하다고 공식 문서가 명시하니 프로덕션에서는 피하세요.
-   (`async_insert`는 여전히 **기본값이 꺼져 있습니다** — opt-in입니다.)
+   (**2026-09-14 정정**: `async_insert`는 한때 기본 꺼짐이었지만
+   [PR #97590](https://github.com/ClickHouse/ClickHouse/pull/97590)로
+   `26.3.1.377`부터 **기본값이 켜짐(`1`)으로 바뀌었습니다** — 최신 stable
+   (`26.8.3.105` 등)에서 직접 확인. 그래도 `wait_for_async_insert`의 의미와
+   위험(아래 참고)은 그대로이니 명시적으로 설정하는 습관은 유지하세요.)
 3. **배경 병합 풀**: `background_pool_size`(기본 16),
    `background_merges_mutations_concurrency_ratio`(기본 2)는 최근
    버전에서는 코어 수에 맞춰 수동으로 스케일링할 필요가 예전보다 줄었지만,

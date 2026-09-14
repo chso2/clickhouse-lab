@@ -13,6 +13,11 @@ Prometheus/Grafana가 떠 있음)에 부담이 큽니다. **Redpanda**는 Kafka 
 프로토콜과 100% 호환되면서 단일 바이너리·ZooKeeper 불필요라 ClickHouse의
 `Kafka` 엔진 입장에서는 완전히 동일하게 동작합니다.
 
+> **최신성 참고 (2026-09-14)**: 아래 고정한 `v24.2.18`은 현재 Redpanda 최신
+> 안정 버전(`v26.2`, 2026-07 출시)보다 메이저 라인 기준 1년 반가량 뒤처져
+> 있습니다. 이 랩은 재현성을 위해 버전을 의도적으로 고정했지만, 새로 이
+> 실험을 시작한다면 최신 안정 버전으로 교체하는 걸 권장합니다.
+
 ```yaml
 # manifests/kafka/redpanda.yaml (요약)
 containers:

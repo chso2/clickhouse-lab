@@ -342,6 +342,12 @@ NoClassDefFoundError: org/springframework/web/servlet/resource/LiteWebJarsResour
 Framework 클래스를 참조하기 때문입니다(springdoc 2.8.x/2.9.x는 대략 Boot
 3.4.x/3.5.x 대상). Boot 3.3.x를 쓰는 동안은 2.6.0~2.7.x 계열로 고정하세요.
 
+> **최신성 참고 (2026-09-14)**: springdoc-openapi는 이미 **3.1.1**(2026-09-06
+> 출시)까지 나와 있어 2.x 계열 자체가 한 세대 전입니다. 3.x는 Spring Boot
+> 3.5.x대를 요구하므로, 이 앱이 Spring Boot 3.3.4에 머무는 한 여전히
+> 2.6.0~2.7.x 고정이 유효한 선택입니다 — Spring Boot를 업그레이드할
+> 계획이 생기면 springdoc도 함께 3.x로 올리는 걸 검토하세요.
+
 ### 정적 `openapi.json` 재생성
 
 ```bash
