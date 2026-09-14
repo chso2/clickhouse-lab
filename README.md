@@ -49,6 +49,14 @@ kubectl apply -f manifests/chi.yaml
 - 부하 테스트 & `max_parallel_replicas` (이 환경 규모에선 오히려 역효과)
 - `ALTER TABLE UPDATE/DELETE` mutation 전파, TTL은 병합 시점에만 평가된다는 것
 - 네트워크 파티션(스플릿 브레인) 시뮬레이션 — Keeper Raft의 자동 재합류 확인
+- 백업/복구 실전 훈련(재해복구 드릴) — `ON CLUSTER` 없이 백업하면 샤드 1개분만
+  조용히 백업되는 함정을 실제로 겪고, 올바른 방법으로 전체 클러스터 삭제 후 복구까지 검증
+- 쿼리 자원 통제(`max_memory_usage`, `max_execution_time`, `KILL QUERY`,
+  동시 쿼리 제한, `QUOTA`)
+- 인제스트 내압 — `parts_to_delay_insert`→`parts_to_throw_insert`로 이어지는
+  선형 백프레셔를 강제로 재현
+- 무중단 스키마 변경 — `ADD`/`MODIFY COLUMN`은 부하 중에도 무중단이지만,
+  `Distributed` 테이블은 별도로 ALTER해야 한다는 함정 확인
 
 자세한 명령어와 결과는 [GUIDE.md](./GUIDE.md)에 정리돼 있습니다.
 

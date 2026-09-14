@@ -1448,9 +1448,313 @@ curl 'http://localhost:8123/?query=SELECT%201'
 
 ---
 
-## 19. 정리
+## 19. 백업/복구 실전 훈련 (재해복구 드릴)
+
+지금까지의 장애 실험은 전부 "클러스터 안에서 자동/수동 복구"였습니다. 이번엔 **클러스터
+자체가 통째로 날아갔을 때 처음부터 복원**하는, 진짜 재해복구(DR) 드릴을 해봤습니다.
+14절에서 "다운그레이드는 불가능하니 롤백은 스냅샷/백업 복원이 필요하다"고 써두고도
+실제로 백업/복구를 검증한 적이 없었던 공백을 메우는 실험입니다.
+
+### 19-1. 백업 대상: MinIO(S3 호환)
+
+ClickHouse 22.8+에 내장된 `BACKUP`/`RESTORE` SQL 문을 씁니다. 백업 목적지는 각 Pod의
+PVC와 독립적이어야 진짜 재해(전체 유실)에서도 살아남으므로, S3 호환 오브젝트 스토리지가
+필요합니다. 이 랩엔 실제 S3가 없으므로 MinIO를 배포해 대신합니다.
+
+```yaml
+# manifests/minio.yaml (요약)
+image: quay.io/minio/minio:latest   # docker.io/minio/minio는 더 이상 pull 불가 (Docker Hub에서 내려감)
+args: [server, /data, --console-address, ":9090"]
+```
+
+> **겪은 함정**: `minio/minio:latest`(Docker Hub)가 `pull access denied`로 실패했습니다.
+> MinIO는 Docker Hub 배포를 중단하고 `quay.io/minio/minio`로 옮겨갔습니다 — 예전
+> 튜토리얼/문서의 `docker.io/minio/minio` 이미지 경로는 이제 안 됩니다.
 
 ```bash
+kubectl --context kind-clickhouse-lab apply -f manifests/minio.yaml
+# mc(MinIO 클라이언트)로 버킷 생성
+kubectl --context kind-clickhouse-lab -n clickhouse run mc-setup --rm -i --restart=Never \
+  --image=quay.io/minio/mc:latest --command -- sh -c "
+  mc alias set myminio http://minio.clickhouse.svc.cluster.local:9000 clickhouse-backup clickhouse-backup-secret &&
+  mc mb myminio/ch-backups"
+```
+
+> 이 랩의 MinIO는 `emptyDir`을 씁니다 — MinIO Pod 자체가 재시작되면 백업도 함께
+> 사라집니다. 실제 운영에서는 반드시 진짜 S3(또는 PVC 기반 MinIO)를 써야 합니다.
+
+### 19-2. 처음 겪은 함정: `ON CLUSTER` 없이 백업하면 샤드 1개분만 조용히 백업된다
+
+`push_click` 데이터베이스(고객 7명, 발송 244건, 클릭 5건 — 4샤드에 `cityHash64`로
+분산된 실제 앱 데이터)를 첫 시도에서 이렇게 백업했습니다.
+
+```sql
+BACKUP DATABASE push_click TO S3('http://minio.../ch-backups/backup_1', 'clickhouse-backup', 'clickhouse-backup-secret')
+-- BACKUP_CREATED, num_files=105 (성공! 에러 없음)
+```
+
+**에러 없이 성공했지만, 이 백업은 실행한 그 노드(샤드1/레플리카1) 하나의 로컬 데이터만
+담고 있었습니다.** `DROP DATABASE push_click`(역시 `ON CLUSTER` 없이) 후
+`RESTORE DATABASE push_click FROM S3(...)`를 실행하자 복구는 "성공"했다고 나왔지만,
+Distributed 테이블로 조회하니:
+
+```
+Code: 279. DB::Exception: All connection tries failed.
+There is no table `push_click`.`click_stats_local` on server: chi-chi-cluster1-2-0:9000
+```
+
+샤드2/3/4에는 테이블 자체가 아예 존재하지 않았습니다 — 데이터 누락이 아니라 **스키마
+자체가 그 3개 샤드에는 없었습니다.** `BACKUP`/`RESTORE DATABASE`는 `ON CLUSTER` 없이는
+**실행한 그 노드 하나**에서만 동작하는 순수 로컬 명령이기 때문입니다(다른 DDL과 동일한
+규칙). 문제를 바로잡으려고 `DROP DATABASE push_click ON CLUSTER 'cluster1'`로 제대로
+지운 시점에는 이미 샤드2/3/4의 **원본 데이터**(애초에 한 번도 백업된 적 없던)가 함께
+삭제되어, 결과적으로 이 랩의 데모 데이터를 실제로 잃어버렸습니다(합성 테스트 데이터라
+`001_init.sql` 재적용 + 동일한 행 수로 재삽입해 복구했습니다).
+
+**이 자체가 이번 실험의 핵심 교훈입니다**: `BACKUP DATABASE`가 에러 없이 성공했다는
+사실은 "전체가 백업됐다"를 보장하지 않습니다. 샤드로 분산된 클러스터에서 이 함정은
+**실제 재해 상황에서, 가장 발견하기 나쁜 시점에** 드러납니다.
+
+### 19-3. 올바른 방법: `ON CLUSTER`로 백업/복구
+
+```sql
+BACKUP DATABASE push_click ON CLUSTER 'cluster1'
+  TO S3('http://minio.clickhouse.svc.cluster.local:9000/ch-backups/push_click_backup_correct',
+        'clickhouse-backup', 'clickhouse-backup-secret')
+-- BACKUP_CREATED, num_files=717 (앞서의 105개와 대조적으로, 12개 노드 전체가 포함됨)
+```
+
+진짜 재해 시뮬레이션(클러스터 전체에서 완전 삭제 후 복구):
+
+```sql
+DROP DATABASE push_click ON CLUSTER 'cluster1' SYNC;
+-- 4개 샤드 대표 노드 전부에서 EXISTS DATABASE push_click = 0 확인
+
+RESTORE DATABASE push_click ON CLUSTER 'cluster1'
+  FROM S3('http://minio.../ch-backups/push_click_backup_correct', ...)
+-- RESTORED, 1.68초 소요
+```
+
+**검증 결과**: 4개 샤드 전부에 스키마 재생성 확인, Distributed 테이블 집계값이 재해
+전과 정확히 일치(`customers=7, pushes=244, clicks=5`), MV/JOIN 뷰
+(`campaign_realtime_stats`)도 정상 동작, 복구 직후 새 INSERT도 즉시 정상 반영 —
+완전히 살아있는 클러스터로 복원됨을 확인했습니다.
+
+### 19-4. 핵심 정리
+
+| 항목 | 결과 |
+|---|---|
+| `BACKUP`/`RESTORE DATABASE` (ON CLUSTER 없이) | **위험** — 실행한 노드 하나만 백업/복구, 에러 없이 조용히 불완전 |
+| `BACKUP`/`RESTORE DATABASE ... ON CLUSTER 'cluster1'` | 12개 노드 전체 포함 (105개 → 717개 파일로 확인) |
+| 백업 목적지 | 클러스터 PVC와 독립된 저장소(S3/MinIO) 필수 — 로컬 디스크 백업은 "진짜 전체 유실" 시나리오에 무용 |
+| RTO (이 데이터 규모 기준) | 백업 <1초, 복구 1.68초 (실제 프로덕션 데이터 규모에서는 훨씬 김 — 규모별 재측정 필요) |
+| 복구 후 데이터 무결성 | 행 수 정확히 일치, MV/집계 뷰 정상, 신규 쓰기 즉시 반영 |
+
+**운영 체크리스트에 추가할 것**: 백업 스크립트에 `ON CLUSTER`가 빠지면 매번 "성공"
+로그만 남고 실제로는 샤드 1개분만 백업되는 것을 알아챌 방법이 없습니다. 정기적으로
+**실제 복구 훈련**(백업만 하고 끝내지 않고, 다른 이름의 DB로 실제 RESTORE까지 해서
+행 수를 비교)을 하지 않으면 이 사일런트 실패를 재해 당일까지 모를 수 있습니다.
+
+---
+
+## 20. 쿼리 자원 통제/거버넌스
+
+여러 워크로드가 같은 클러스터를 공유할 때, 쿼리 하나가 전체에 영향을 주지 않도록 막는
+장치들을 실제로 걸어보고 동작을 확인합니다.
+
+### 20-1. `max_memory_usage` — 쿼리 하나가 쓸 수 있는 메모리 상한
+
+```sql
+SELECT count() FROM numbers(200000000) GROUP BY number % 1000000 SETTINGS max_memory_usage=10000000
+```
+```
+Code: 241. DB::Exception: Query memory limit exceeded: would use 12.19 MiB
+(attempt to allocate chunk of 4.03 MiB), maximum: 9.54 MiB (MEMORY_LIMIT_EXCEEDED)
+```
+정확히 설정한 한도에서 즉시, 깔끔한 예외로 종료됩니다.
+
+### 20-2. `max_execution_time` — 실행 시간 상한
+
+```sql
+SELECT count() FROM numbers(50000000000) WHERE number % 7 = 0 SETTINGS max_execution_time=3
+```
+```
+Code: 159. DB::Exception: Timeout exceeded: elapsed 3000.040 ms, maximum: 3000.000 ms (TIMEOUT_EXCEEDED)
+```
+설정한 3초에 정확히 맞춰 종료됩니다.
+
+### 20-3. `KILL QUERY` — 다른 세션에서 실행 중인 쿼리 강제 종료
+
+```sql
+-- 세션 A: 오래 걸리는 쿼리 실행 (max_execution_time=0으로 자체 타임아웃 무력화)
+SELECT count() FROM numbers(50000000000) WHERE number % 13 = 0 SETTINGS max_execution_time=0
+
+-- 세션 B: system.processes로 찾아서 강제 종료
+KILL QUERY WHERE query LIKE '%number %% 13%' SYNC
+```
+세션 A는 `Code: 394 QUERY_WAS_CANCELLED`로 즉시 종료됩니다 — 운영 중 폭주하는 쿼리를
+사람이 개입해 안전하게 끊을 수 있음을 확인했습니다.
+
+### 20-4. `max_concurrent_queries_for_user` — 사용자별 동시 쿼리 수 제한
+
+```bash
+# 동일 사용자로 3개 동시 실행, 한도는 2
+for i in 1 2 3; do
+  clickhouse-client -q "SELECT sleep(3), $i SETTINGS max_concurrent_queries_for_user=2" &
+done
+```
+3번째 쿼리만 즉시 거부됩니다:
+```
+Code: 202. DB::Exception: Too many simultaneous queries for user default. Current: 2, maximum: 2.
+```
+
+### 20-5. `QUOTA` — 시간 단위 쿼리 횟수 제한, 그리고 겪은 함정
+
+```sql
+CREATE QUOTA test_quota KEYED BY user_name FOR INTERVAL 1 MINUTE MAX queries = 2 TO default
+```
+
+**처음엔 4번을 연달아 실행해도 전혀 막히지 않았습니다** — `system.quotas_usage`도
+계속 `queries=0`으로 나왔습니다. 원인은 `SYSTEM RELOAD USERS`를 실행하지 않아서였습니다.
+`default` 사용자가 `users.xml`(정적 설정 파일) 기반이라, SQL로 새로 만든 쿼터가 그
+사용자에게 실제로 적용되기까지 접근 제어 재적재가 필요했습니다. `SYSTEM RELOAD USERS`
+실행 후에는 정확히 한도(2)에서 막혔고, 심지어 **한도를 초과한 뒤에는 그 쿼터를 고치려는
+`DROP QUOTA`/`SYSTEM RELOAD USERS` 명령 자체까지 같이 거부**되는 것도 확인했습니다:
+```
+Code: 201. DB::Exception: Quota for user `default` for 60s has been exceeded: queries = 3/2.
+```
+운영 관점 교훈: SQL 기반 쿼터를 XML 기반 사용자에게 새로 연결한 뒤에는 **반드시
+`SYSTEM RELOAD USERS`로 재적재를 확인**해야 하고, 쿼터를 잘못 설정해 자기 자신이
+막히는 경우를 대비해 별도의(쿼터 미적용) 관리자 계정을 확보해두는 게 안전합니다.
+
+### 20-6. 핵심 정리
+
+| 설정 | 통제 대상 | 실측 |
+|---|---|---|
+| `max_memory_usage` | 쿼리 1개의 메모리 | 한도 초과 시 즉시 `MEMORY_LIMIT_EXCEEDED` |
+| `max_execution_time` | 쿼리 1개의 실행 시간 | 설정 시간에 정확히 `TIMEOUT_EXCEEDED` |
+| `KILL QUERY` | 이미 실행 중인 쿼리 | 즉시 `QUERY_WAS_CANCELLED` |
+| `max_concurrent_queries_for_user` | 사용자별 동시 실행 수 | 한도 초과분만 즉시 거부 |
+| `QUOTA` | 사용자별 시간당 누적 사용량 | 정확히 작동하지만, XML 사용자엔 `SYSTEM RELOAD USERS` 필요 |
+
+---
+
+## 21. 인제스트 내압/백프레셔
+
+삽입이 병합(merge) 속도보다 빨라지면 무슨 일이 생기는지 확인합니다. `parts_to_delay_insert`
+(지연 시작 임계값)와 `parts_to_throw_insert`(거부 임계값)를 낮게 잡은 테이블로 재현합니다.
+
+```sql
+CREATE TABLE backpressure_test (id UInt64, val String) ENGINE = MergeTree ORDER BY id
+SETTINGS parts_to_delay_insert = 5, parts_to_throw_insert = 10, max_delay_to_insert = 3
+```
+
+단건 INSERT를 연속 실행하며 파트 수와 소요 시간을 관찰했더니, 평소엔 배경 병합이
+파트를 빠르게 합쳐서 5개 문턱을 거의 안 넘었습니다. **병합을 완전히 멈추고**
+(`SYSTEM STOP MERGES backpressure_test`) 다시 삽입하자 교과서적인 패턴이 그대로
+나타났습니다:
+
+| 삽입 순번 | 활성 파트 수 | 소요 시간 |
+|---|---|---|
+| 51~54 | 2~5 | ~0.13~0.33초 (정상) |
+| 55 | 6 | 0.73초 |
+| 56 | 7 | 1.33초 |
+| 57 | 8 | 1.93초 |
+| 58 | 9 | 2.53초 |
+| 59 | 10 | 3.13초 (거의 `max_delay_to_insert=3` 상한에 도달) |
+| 60 | 10 | **즉시 실패** — `Code: 252 (TOO_MANY_PARTS)` |
+
+`parts_to_delay_insert`(5)를 넘어서자 파트 수에 **선형 비례**해 삽입이 점점 느려지다가
+(0.73→1.33→1.93→2.53→3.13초), `parts_to_throw_insert`(10)에 도달하자 그제야 완전히
+거부됩니다. 이 지연 메커니즘은 "삽입 속도를 병합 속도에 맞춰 스스로 늦추는" 자동
+브레이크입니다 — 정상적인 워크로드에서는 병합이 이 지연 동안 따라잡아 거의 throw까지
+가지 않는다는 것도 이번 실험(병합을 멈추기 전까지는 throw가 재현되지 않았던 것)에서
+확인했습니다.
+
+**운영 함의**: `TOO_MANY_PARTS` 에러를 실제로 본다면, 이미 그 전에 삽입 지연이 점점
+길어지는 신호가 먼저 나타났을 것입니다(`system.query_log`의 INSERT 소요 시간 추세로
+조기 감지 가능). 근본 원인은 대개 "삽입 배치가 너무 작음"(매 INSERT가 새 파트 하나를
+만듦)이므로, `async_insert`나 애플리케이션 레벨 배치로 삽입 빈도를 줄이는 게 표준
+해법입니다.
+
+---
+
+## 22. 무중단 스키마 변경
+
+부하가 걸린 상태에서 `ALTER TABLE ADD/MODIFY COLUMN`이 정말로 블로킹 없이 끝나는지,
+그리고 `ON CLUSTER` 환경에서 놓치기 쉬운 부분을 확인합니다.
+
+### 22-1. `ADD COLUMN` — 부하 중에도 완전히 무중단
+
+0.15초 간격으로 계속 INSERT하는 백그라운드 루프를 돌리며:
+
+```sql
+ALTER TABLE schema_migration_test_local ON CLUSTER 'cluster1'
+ADD COLUMN extra_field String DEFAULT 'none'
+```
+
+12개 노드 전체에 0.36초 만에 완료됐고, 동시에 돌던 INSERT 루프에서 **에러 0건**,
+소요 시간 튐도 없었습니다(최대 0.22초, 평소와 동일). 상수 기본값의 `ADD COLUMN`은
+메타데이터만 바꾸는 작업이라 완전히 무중단이라는 걸 부하 상태에서 직접 확인했습니다.
+
+### 22-2. `MODIFY COLUMN` (타입 변경)도 마찬가지로 무중단이지만…
+
+```sql
+ALTER TABLE schema_migration_test_local ON CLUSTER 'cluster1'
+MODIFY COLUMN val LowCardinality(String)
+```
+
+이것도 0.57초 만에 끝났고 동시 INSERT 루프는 에러 0건이었습니다. 그런데 검증 쿼리를
+**Distributed 테이블**로 돌리니 `toTypeName(val)`이 여전히 `String`이었습니다.
+
+### 22-3. 핵심 함정: `Distributed` 테이블은 자기만의 스키마 스냅샷을 갖는다
+
+로컬 테이블(`schema_migration_test_local`)에서 직접 확인하면 타입이 제대로
+`LowCardinality(String)`로 바뀌어 있었습니다. 문제는 `Distributed` 테이블
+(`schema_migration_test`)의 컬럼 정의가 **생성 시점에 찍힌 별도의 스냅샷**이라서,
+로컬 테이블을 아무리 `ON CLUSTER`로 잘 바꿔도 Distributed 테이블 자체는 전혀 갱신되지
+않는다는 것입니다. 실제로 새로 추가한 컬럼을 Distributed 테이블로 조회하면:
+
+```sql
+SELECT extra_field FROM schema_migration_test LIMIT 1
+```
+```
+Code: 47. DB::Exception: Unknown expression identifier `extra_field`. (UNKNOWN_IDENTIFIER)
+```
+
+**조용히 무시되는 게 아니라 하드 에러입니다.** 로컬 테이블은 이미 완전히 마이그레이션
+됐는데도, 그 컬럼을 참조하는 애플리케이션 쿼리는 Distributed 테이블을 통하는 한 전부
+실패합니다. 해결은 Distributed 테이블에도 **동일한 ALTER를 별도로** 적용하는 것뿐입니다:
+
+```sql
+ALTER TABLE schema_migration_test ON CLUSTER 'cluster1'
+ADD COLUMN extra_field String DEFAULT 'none',
+MODIFY COLUMN val LowCardinality(String)
+```
+
+적용 후에는 Distributed 테이블 조회도 정상(`none`, `LowCardinality(String)`)으로
+돌아옵니다.
+
+### 22-4. 핵심 정리
+
+| 항목 | 결과 |
+|---|---|
+| `ADD COLUMN` (상수 기본값), 부하 중 | 완전 무중단, 0.36초, 에러 0건 |
+| `MODIFY COLUMN` (타입 변경), 부하 중 | 완전 무중단, 0.57초, 에러 0건 (로컬 테이블 기준) |
+| `Distributed` 테이블 스키마 | **로컬 테이블 ALTER와 별개** — 반드시 Distributed 테이블에도 동일한 ALTER를 실행해야 함 |
+| 누락 시 증상 | 조용한 무시가 아니라 `UNKNOWN_IDENTIFIER` 하드 에러 |
+
+**운영 체크리스트에 추가할 것**: 스키마 마이그레이션 스크립트/도구를 만든다면
+`_local ON CLUSTER`와 `Distributed 테이블 ON CLUSTER`에 **각각** ALTER를 내리는
+단계를 명시적으로 두 번 넣어야 합니다 — 하나라도 빠지면 "로컬은 됐는데 앱은 계속
+터지는" 상태로 배포가 끝나버립니다.
+
+---
+
+## 23. 정리
+
+```bash
+kubectl --context kind-clickhouse-lab -n clickhouse delete -f manifests/minio.yaml
 kind delete cluster --name clickhouse-lab
 ```
 
