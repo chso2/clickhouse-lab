@@ -1931,7 +1931,124 @@ ALTER하지 않으면 그 컬럼을 아예 모른다는(하드 에러) 함정을
 
 ---
 
-## 25. 정리
+## 25. 메모리 스필오버(External Aggregation/Sort/JOIN) 검증
+
+대용량 GROUP BY/ORDER BY/JOIN 쿼리가 메모리를 다 채우려 할 때, **파드가 OS OOM
+killer에 죽는 것(전체 서버 다운)**과 **쿼리 하나만 정상적으로 실패하거나 디스크로
+스필해서 계속 진행하는 것** 사이의 차이를 실측했습니다.
+
+> **왜 진짜 OOM을 재현하지 않았는가**: 이 클러스터의 ClickHouse 파드는
+> `resources: {}` — **메모리 상한이 전혀 설정돼 있지 않습니다.** 게다가 공유
+> Colima VM 여유가 2GB 안팎으로 빠듯합니다(CHDB-BENCHMARK.md에서 겪은 사고
+> 참고). 이 상태로 진짜 무제한 메모리 폭주를 유도하면 파드 하나가 아니라 VM
+> 전체가 위험해집니다. 그래서 `max_memory_usage`를 항상 안전판으로 고정해두고,
+> "스필 비활성 시 vs 활성 시"를 **같은 캡 안에서** 대조하는 방식으로 검증했습니다
+> — 이 대조 자체가 스필 메커니즘이 실제로 메모리 사용량을 낮춰준다는 증거입니다.
+
+### 25-1. GROUP BY (`max_bytes_before_external_group_by`)
+
+800만 개의 서로 다른 그룹을 만드는 쿼리를 동일한 `max_memory_usage=300MB` 아래
+스필 비활성/활성으로 대조했습니다.
+
+```sql
+-- 스필 비활성 (max_bytes_before_external_group_by=0) -> 실패
+SELECT key, sum(val), count() FROM (
+  SELECT number % 8000000 AS key, sin(number) AS val FROM numbers(40000000)
+) GROUP BY key
+SETTINGS max_memory_usage=300000000, max_bytes_before_external_group_by=0
+-- Code: 241 MEMORY_LIMIT_EXCEEDED (약 286MiB에서 즉시 실패)
+```
+```sql
+-- 스필 활성 (50MB 문턱) -> 같은 300MB 캡에서 성공
+SETTINGS max_memory_usage=300000000, max_bytes_before_external_group_by=50000000
+-- 2.68초, memory_usage=259.85MB(캡 이내), ExternalAggregationWritePart=68회,
+-- 디스크에 483.65MB 스필
+```
+
+같은 쿼리, 같은 메모리 캡인데 스필 문턱만 낮췄더니 실패하던 쿼리가 정상
+완료됐고, 실행 중 `/var/lib/clickhouse/tmp/`에 실제 스필 파일이 생겼다가
+쿼리 종료 후 자동으로 정리되는 것도 확인했습니다.
+
+**핵심 함정 — 스필은 "중간 상태"만 지켜주지 "최종 병합"까지 지켜주진 않습니다.**
+그룹 수를 1,500만 개로 늘리자 **같은 스필 설정**에서도 다시 실패했는데, 이번엔
+"병합(머지) 단계"에서 터졌습니다. `max_memory_usage`만 600MB로 올리자(스필 설정은
+그대로) 성공했습니다 — 즉 external GROUP BY는 중간 누적 단계의 메모리는 디스크로
+돌려 막아주지만, **스필된 조각들을 최종적으로 합치는 단계는 여전히 최종 결과의
+distinct 그룹 수에 비례하는 메모리가 필요**합니다. 스필을 켰다고 해서
+`max_memory_usage`를 결과 크기와 무관하게 낮춰도 된다는 뜻이 아닙니다.
+
+### 25-2. JOIN (`join_algorithm='grace_hash'`)
+
+우측(빌드 사이드) 500만 행짜리 JOIN을 동일하게 대조했습니다.
+
+```sql
+-- 기본 hash join -> 실패
+... SETTINGS max_memory_usage=300000000, join_algorithm='hash'
+-- Code: 241, "FillingRightJoinSide"에서 즉시 실패
+
+-- grace_hash로 바꿔도... 여전히 실패!
+... SETTINGS max_memory_usage=300000000, join_algorithm='grace_hash'
+-- 여전히 Code: 241 (기본 설정으로는 hash join과 동일하게 동작)
+```
+
+**핵심 함정 — `join_algorithm='grace_hash'`만으로는 부족합니다.**
+`grace_hash_join_initial_buckets`의 기본값이 **1**이라, 처음엔 일반 hash join과
+똑같이 버킷 1개에 전부 몰아넣다가 뒤늦게 재분할을 시도합니다 — 그런데 그 반응이
+`max_memory_usage`의 즉각적인 하드 체크보다 느려서, 결국 같은 지점에서 죽습니다.
+**초기 버킷 수를 명시적으로 올려야** 처음부터 분할·스필이 일어납니다:
+
+```sql
+SETTINGS max_memory_usage=300000000, join_algorithm='grace_hash',
+         grace_hash_join_initial_buckets=16
+-- 0.72초 성공, memory_usage=165.60MB, ExternalJoinWritePart=32회, 95.48MB 스필
+```
+
+### 25-3. ORDER BY (`max_bytes_before_external_sort`) — 버전별 숨겨진 게이트
+
+1억 행 정렬을 같은 방식으로 테스트했는데, `max_bytes_before_external_sort=50MB`를
+설정했음에도 **계속 실패**했습니다(`max_memory_usage`를 1GB까지 올려도 동일) —
+`system.query_log`의 `ExternalSortWritePart`가 **0**이어서 스필 자체가 전혀
+발동하지 않고 있었습니다.
+
+원인은 이 버전에 새로 추가된 설정 **`max_bytes_ratio_before_external_sort`
+(기본값 0.5)**였습니다 — 설명에 명시된 대로 "`max_bytes_before_external_sort`는
+여전히 존중되지만, 정렬 블록이 이 값보다 클 때만 스필한다"는 **추가 게이트**가
+숨어있었습니다. 이 비율 게이트를 명시적으로 꺼야 절대값 설정이 실제로 동작합니다:
+
+```sql
+SETTINGS max_memory_usage=300000000, max_bytes_before_external_sort=50000000,
+         max_bytes_ratio_before_external_sort=0
+-- 13.04초 성공, memory_usage=217.05MB, ExternalSortWritePart=31회, 1.27GB 스필
+```
+
+**이건 이 랩에서 몇 번이고 반복된 패턴입니다** — 15절의 `enable_parallel_replicas`
+(별도 설정 없이는 `max_parallel_replicas`가 무효), 바로 위 25-2절의 grace_hash
+초기 버킷 수와 정확히 같은 모양: **"기능을 켜는 설정"과 "그 기능이 실제로 발동하는
+조건"이 분리돼 있는 경우가 흔하고, 버전이 올라가며 새 게이트 설정이 조용히
+추가되기도 합니다.**
+운영 환경에 새로 배포하기 전에는 반드시 스테이징에서 `system.query_log`의
+`ProfileEvents`(`External*WritePart`)로 **스필이 실제로 발동했는지 직접 확인**하세요 —
+설정값만 믿고 "당연히 스필되겠지"라고 가정하면 안 됩니다.
+
+### 25-4. 핵심 정리
+
+| 쿼리 유형 | 활성화 설정 | 추가로 필요했던 것 | 실측 결과 |
+|---|---|---|---|
+| GROUP BY | `max_bytes_before_external_group_by` | (그대로 동작) | 스필 68회, 484MB, 2.68초 — 단 **최종 병합은 여전히 결과 크기만큼 메모리 필요** |
+| JOIN | `join_algorithm='grace_hash'` | `grace_hash_join_initial_buckets`를 기본값(1)보다 높게 | 스필 32회, 95MB, 0.72초 |
+| ORDER BY | `max_bytes_before_external_sort` | `max_bytes_ratio_before_external_sort=0` (신규 게이트 해제) | 스필 31회, 1.27GB, 13.04초 |
+
+**운영 함의**: 이 세 메커니즘 모두 "설정 하나만 켜면 끝"이 아니라 **버전/알고리즘별
+숨은 2차 조건**이 있습니다. `max_memory_usage`는 이 모든 실험에서 단 한 번도
+뚫리지 않았습니다(항상 캡 이내에서 성공하거나, 캡을 넘기 직전 깔끔하게
+`MEMORY_LIMIT_EXCEEDED`로 실패) — 즉 **리소스 제한이 없는 이 클러스터에서
+`max_memory_usage`가 사실상 유일한 안전망**입니다. 이 설정 없이 스필 기능만
+믿고 대용량 쿼리를 운영에 내보내면, 스필이 예상대로 발동하지 않는 버전/설정
+조합을 만났을 때 파드 전체가 OOM killer에 죽는 시나리오를 막을 수단이 없습니다.
+
+---
+
+## 26. 정리
 
 ```bash
 kubectl --context kind-clickhouse-lab -n clickhouse delete -f manifests/minio.yaml

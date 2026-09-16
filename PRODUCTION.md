@@ -155,6 +155,29 @@ INSERT는 최소 1개의 파트를 만들고, 파트가 너무 많아지면 서�
 
 ## 5. 메모리/동시성 설정
 
+- **쿠버네티스 파드에 `resources.limits.memory`를 반드시 설정하세요.**
+  이 랩의 CH 파드는 `resources: {}`(무제한)였는데, 이 상태에서 대용량 쿼리가
+  메모리를 통제 없이 요구하면 **파드 하나가 아니라 노드 전체가 커널 OOM
+  killer의 표적**이 될 수 있습니다(GUIDE.md 25절). `max_memory_usage`는
+  ClickHouse **프로세스 내부**의 안전장치일 뿐, 그 프로세스 자체가 얼마나
+  커질 수 있는지는 k8s가 별도로 제한해야 합니다.
+- **대용량 GROUP BY/ORDER BY/JOIN에는 반드시 external spill을 켜고, "켰다"고
+  믿지 말고 실제로 발동하는지 확인하세요**(GUIDE.md 25절 실측):
+  - `max_bytes_before_external_group_by`를 켜도 **최종 병합 단계**는 여전히
+    결과 distinct 그룹 수에 비례하는 메모리가 필요합니다 — 스필이 중간
+    단계 메모리는 줄여주지만 `max_memory_usage`를 결과 크기와 무관하게
+    낮춰도 된다는 뜻은 아닙니다.
+  - `join_algorithm='grace_hash'`만 켜서는 부족합니다 —
+    `grace_hash_join_initial_buckets`(기본값 1)를 올리지 않으면 처음엔
+    일반 hash join과 똑같이 동작하다가 `max_memory_usage`에 먼저 걸립니다.
+  - `max_bytes_before_external_sort`도 이 버전 기준으로는
+    `max_bytes_ratio_before_external_sort`(기본 0.5, 신규 추가된 게이트)를
+    함께 낮추지 않으면 스필이 전혀 발동하지 않았습니다.
+  - 배포 전 스테이징에서 `system.query_log`의 `ProfileEvents`
+    (`ExternalAggregationWritePart`, `ExternalJoinWritePart`,
+    `ExternalSortWritePart`)로 **스필이 실제로 0회가 아닌지** 확인하는
+    걸 체크리스트에 넣으세요 — 버전이 올라가며 게이팅 조건이 조용히
+    추가될 수 있습니다.
 - `max_server_memory_usage_to_ram_ratio`: 공유 호스트/K8s에서는 0.8 권장
   (기본 0.9).
 - `max_memory_usage`(쿼리당, 기본 ~10GB): 사용자별로 맡기기보다, **기본

@@ -61,6 +61,10 @@ kubectl apply -f manifests/chi.yaml
   거치면 작동하지 않는다는 함정 확인 (Kafka 재처리 중복 문제의 근본 원인 규명)
 - Projection으로 쿼리 가속 — 자동 선택 확인, `Distributed` 테이블은
   `ADD COLUMN`과 달리 별도 조치 없이도 투명하게 혜택을 받는다는 것 확인
+- 메모리 스필오버 검증(GROUP BY/JOIN/ORDER BY) — 같은 메모리 캡에서 스필
+  비활성/활성 대조, `grace_hash`의 초기 버킷 수·새로 추가된
+  `max_bytes_ratio_before_external_sort` 게이트처럼 "설정만 켜서는 부족한"
+  숨은 조건들을 실측
 
 자세한 명령어와 결과는 [GUIDE.md](./GUIDE.md)에 정리돼 있습니다.
 
