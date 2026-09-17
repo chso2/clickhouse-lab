@@ -215,6 +215,19 @@ INSERT는 최소 1개의 파트를 만들고, 파트가 너무 많아지면 서�
   - 권장 조합: 서버 레벨에 하드 캡 + 짧은 큐 대기, 프로필 레벨에 사용자/
     그룹별 공정성 한도(운영자 계정은 예외 처리)를 함께 거세요
     (GUIDE.md 27-4절).
+- **배치 작업과 실시간 조회는 별도 사용자 + 프로필로 분리하세요.** 배치
+  계정은 낮은 `max_concurrent_queries_for_user` + 긴 `max_execution_time`,
+  실시간 계정은 높은 동시성 + 짧은 `max_execution_time`(빠른 실패)으로
+  설정하면 한쪽이 한도를 채워도 다른 쪽은 완전히 무관하게 동작함을
+  실측했습니다(GUIDE.md 28-1절). 단, **프로필 상속(`profile: default`)과
+  같은 설정을 동시에 오버라이드하면, Operator가 XML을 알파벳순으로
+  생성하는 특성상 부모 프로필이 자식의 오버라이드를 조용히 덮어쓸 수
+  있습니다** — 적용 후 `system.settings`로 사용자별 실제 값을 반드시
+  재확인하세요(GUIDE.md 28-2절). 더 정교한 CPU 단위 격리(`CREATE
+  WORKLOAD`/`CREATE RESOURCE`)도 있지만, 스레드 상한 자체는 검증됐어도
+  우선순위 기반의 "실시간이 항상 더 빠르다"는 공정성까지는 이 랩에서
+  일관되게 재현하지 못했으므로(GUIDE.md 28-3절), 지금 신뢰하고 쓸 수 있는
+  것은 사용자 분리 쪽입니다.
 - **`QUOTA`로 시간당 사용량 자체를 제한**할 수도 있습니다(`CREATE QUOTA ...
   FOR INTERVAL 1 MINUTE MAX queries = N`). 단, **XML로 정의된 사용자
   (`users.xml`)에게 SQL로 새 쿼터를 연결한 직후에는 `SYSTEM RELOAD USERS`를

@@ -40,6 +40,21 @@ spec:
       default/max_bytes_ratio_before_external_sort: "0"
       default/join_algorithm: "grace_hash"
       default/grace_hash_join_initial_buckets: "16"
+      batch_profile/profile: "default"
+      batch_profile/max_concurrent_queries_for_user: "2"
+      batch_profile/max_execution_time: "300"
+      batch_profile/max_memory_usage: "2000000000"
+      realtime_profile/profile: "default"
+      realtime_profile/max_concurrent_queries_for_user: "20"
+      realtime_profile/max_execution_time: "5"
+      realtime_profile/max_memory_usage: "300000000"
+    users:
+      batch_user/password: "batch_pass_2026"
+      batch_user/profile: "batch_profile"
+      batch_user/networks/ip: "::/0"
+      realtime_user/password: "realtime_pass_2026"
+      realtime_user/profile: "realtime_profile"
+      realtime_user/networks/ip: "::/0"
   templates:
     volumeClaimTemplates:
       - name: default-volume-claim

@@ -2262,7 +2262,126 @@ X-ClickHouse-Exception-Code: 202
 
 ---
 
-## 28. 정리
+## 28. 배치 vs 실시간 — 사용자 분리로 워크로드 격리하기
+
+27절에서 "대기열은 서버 레벨 한도에만 적용된다"를 확인했으니, 사용자별로는
+"대기"가 아니라 "즉시 거부 + 서로 다른 한도"로 배치/실시간을 분리하는 게
+현실적인 방법입니다. 실제로 `batch_user`/`realtime_user` 두 사용자를 만들어
+검증했습니다. 참고로 이 버전(26.9)엔 더 정교한 **CPU Workload Scheduling**
+(`CREATE RESOURCE`/`CREATE WORKLOAD`) 기능도 있어서 함께 시도해봤는데, 절반만
+깨끗하게 검증됐습니다 — 아래 28-3절에 정직하게 기록합니다.
+
+### 28-1. 사용자 + 프로필 분리 (검증된 방법)
+
+```yaml
+# manifests/chi.yaml
+    profiles:
+      batch_profile/profile: "default"
+      batch_profile/max_concurrent_queries_for_user: "2"
+      batch_profile/max_execution_time: "300"
+      realtime_profile/profile: "default"
+      realtime_profile/max_concurrent_queries_for_user: "20"
+      realtime_profile/max_execution_time: "5"
+    users:
+      batch_user/password: "batch_pass_2026"
+      batch_user/profile: "batch_profile"
+      batch_user/networks/ip: "::/0"
+      realtime_user/password: "realtime_pass_2026"
+      realtime_user/profile: "realtime_profile"
+      realtime_user/networks/ip: "::/0"
+```
+
+**검증 1 — 동시성 격리**: `batch_user`로 슬롯 2개를 채운 뒤 3번째 쿼리를
+날리면 정확히 `batch_user`만 거부되고, **그 순간 `realtime_user`는 완전히
+정상 동작**했습니다.
+
+```
+batch_user 3번째: Code 202 "Too many simultaneous queries for user batch_user. Current: 2, maximum: 2."
+realtime_user (동시): 'realtime-unaffected' 정상 반환
+```
+
+**검증 2 — 실행 시간 격리**: `realtime_user`(5초 제한)로 무거운 쿼리를 실행하면
+정확히 5,000ms에서 `TIMEOUT_EXCEEDED`로 종료되지만, **같은 규모의 쿼리를
+`batch_user`(300초 제한)로 실행하면 36.7초 만에 정상 완료**됩니다 — 배치는
+오래 걸리는 걸 허용하고, 실시간은 빠르게 실패해서 앱이 대기하지 않게 합니다.
+
+### 28-2. 겪은 함정: 프로필 상속 순서가 오버라이드를 무효화할 수 있다
+
+`batch_profile`에 `max_memory_usage=2000000000`(2GB, 배치용으로 더 크게)을
+명시하고 `profile: default`로 공통 설정(스필 옵션 등)도 상속받게 했는데,
+실제 적용된 값은 2GB가 아니라 **`default`의 300MB 그대로**였습니다. 생성된
+XML을 직접 열어보니:
+
+```xml
+<batch_profile>
+    <max_concurrent_queries_for_user>2</max_concurrent_queries_for_user>
+    <max_execution_time>300</max_execution_time>
+    <max_memory_usage>2000000000</max_memory_usage>   <!-- 분명히 있음 -->
+    <profile>default</profile>                          <!-- 그런데 이게 이 뒤에 옴 -->
+</batch_profile>
+```
+
+Altinity Operator가 XML 자식 요소를 **알파벳 순으로 정렬**해서 생성하는데,
+`max_memory_usage`(m)가 `profile`(p)보다 알파벳상 앞이라 `<profile>` 상속
+태그가 **문서상 나중에** 옵니다. ClickHouse는 이 순서 그대로 처리해서, 나중에
+나온 `<profile>default</profile>`이 그 앞의 명시적 `max_memory_usage`를
+덮어써 버립니다. **자기 프로필에서 명시적으로 오버라이드하고 싶은 설정이
+부모 프로필에도 있다면, 이 순서 문제 때문에 오버라이드가 조용히 무시될 수
+있습니다** — 적용 후 반드시 `system.settings`로 실제 값을 재확인하세요
+(이번처럼 `changed`/`value`를 사용자별로 직접 조회).
+
+### 28-3. CPU Workload Scheduling(`CREATE WORKLOAD`) — 절반만 검증됨
+
+이 버전엔 `system.workloads`/`system.resources`/`system.scheduler`로 조회 가능한
+CPU 스케줄링 기능이 있습니다.
+
+```sql
+CREATE RESOURCE cpu (MASTER THREAD, WORKER THREAD);
+CREATE WORKLOAD all_queries SETTINGS max_concurrent_threads = 100;
+CREATE WORKLOAD batch IN all_queries SETTINGS max_concurrent_threads = 2 FOR cpu;
+CREATE WORKLOAD realtime IN all_queries SETTINGS priority = -5 FOR cpu;
+```
+
+**확실히 검증된 것**: `FOR cpu`로 실제 자원에 연결해야 `system.scheduler`에
+스케줄러 노드가 생기고 제약이 실제로 걸립니다(연결 안 하면 `max_concurrent_threads`
+값은 저장만 되고 아무 효과가 없었습니다). **단독으로 실행한 쿼리**에서는
+`workload='batch'`(2스레드 캡)가 `workload` 미지정(기본) 대비 명확히
+느렸습니다(2.37초 vs 1.25초) — 워크로드별 CPU 예산 상한 자체는 실제로
+작동합니다.
+
+**검증하지 못한 것**: `batch`(낮은 우선순위, 스레드 캡)와 `realtime`(높은
+우선순위)를 **동시에** 실행해서 "실시간 쿼리가 더 빨리 끝나는지" 반복
+측정했지만, 분리했을 때와 안 했을 때의 소요 시간 차이가 **일관된 방향을
+보이지 않았습니다**(대조군 3.85s/5.05s, 분리 4.37s/4.32s — 개선되기도,
+악화되기도 함). 이 랩의 공유 VM이 이미 19개 파드로 붐비는 노이즈가 큰
+환경이라는 점, 그리고 이 기능이 비교적 최근에 추가된 것으로 보인다는 점을
+감안하면 재현에 실패한 이유가 (a) 이 환경의 노이즈, (b) 제 설정 미스,
+(c) 기능 자체의 한계 중 무엇인지 이번 실험만으로는 결론 내릴 수 없었습니다
+— 있는 그대로 미해결로 남깁니다. (참고: `system.query_log.thread_ids`로
+실제 스레드 수를 검증하려 했으나, 워크로드를 전부 삭제한 뒤에도 모든
+쿼리가 예외 없이 2로 나와 이 컬럼 자체가 이번 실험에서는 신뢰할 수 있는
+지표가 아니었습니다.)
+
+### 28-4. 핵심 정리
+
+| 방법 | 검증 상태 | 결과 |
+|---|---|---|
+| 사용자별 프로필(`max_concurrent_queries_for_user`, `max_execution_time`) | ✅ 완전 검증 | 한 사용자가 한도를 채워도 다른 사용자는 완전히 무관하게 동작 |
+| 프로필 상속(`profile: default`) + 같은 설정 오버라이드 | ⚠️ 함정 발견 | XML 알파벳 정렬 순서상 부모가 자식의 오버라이드를 덮어쓸 수 있음 — 반드시 재확인 |
+| CPU Workload Scheduling — 스레드 상한 | ✅ 검증(단독 실행) | `FOR cpu` 연결 필수, 단독 쿼리에서 캡 확인(2.37s vs 1.25s) |
+| CPU Workload Scheduling — 우선순위 기반 동시 실행 공정성 | ❓ 미해결 | 반복 측정에서 일관된 효과를 관측하지 못함 |
+
+**실전 권장**: 지금 당장 신뢰하고 쓸 수 있는 건 **사용자 + 프로필 분리**입니다
+— 배치 계정은 낮은 동시성/긴 실행시간 허용, 실시간 계정은 높은 동시성/짧은
+실행시간으로 빠르게 실패하게 설정하세요. CPU Workload Scheduling의 스레드
+상한(`max_concurrent_threads` + `FOR <resource>`)은 "배치가 서버 전체 코어를
+독점하지 못하게 하는 하드 캡"으로는 검증된 대로 쓸 수 있지만, "실시간이 항상
+더 빠르게 처리된다"는 우선순위 기반 공정성까지 기대한다면 반드시 여러분의
+실제 운영 환경에서 직접 반복 측정으로 재검증하세요.
+
+---
+
+## 29. 정리
 
 ```bash
 kubectl --context kind-clickhouse-lab -n clickhouse delete -f manifests/minio.yaml
