@@ -180,10 +180,19 @@ INSERT는 최소 1개의 파트를 만들고, 파트가 너무 많아지면 서�
     추가될 수 있습니다.
 - `max_server_memory_usage_to_ram_ratio`: 공유 호스트/K8s에서는 0.8 권장
   (기본 0.9).
-- `max_memory_usage`(쿼리당, 기본 ~10GB): 사용자별로 맡기기보다, **기본
-  프로파일에 안전한 상한을 명시적으로 설정**해 모든 사용자가 상속받게 하는 게
-  베스트 프랙티스입니다. 개별 쿼리마다 설정을 강제하기보다 조직 차원의
-  기본값을 정하세요.
+- `max_memory_usage`(쿼리당, **이 랩 클러스터의 실제 기본값은 `0`=무제한이었음**):
+  사용자별로 맡기기보다, **기본 프로파일에 안전한 상한을 명시적으로 설정**해
+  모든 사용자가 상속받게 하는 게 베스트 프랙티스입니다. 개별 쿼리마다 설정을
+  강제하기보다 조직 차원의 기본값을 정하세요. Altinity Operator라면 CHI의
+  `spec.configuration.profiles`(`default/max_memory_usage`,
+  `default/max_bytes_before_external_group_by`,
+  `default/max_bytes_before_external_sort`,
+  `default/max_bytes_ratio_before_external_sort`, `default/join_algorithm`,
+  `default/grace_hash_join_initial_buckets` 등)로 25절의 모든 스필/메모리
+  설정을 한 번에 클러스터 전체 기본값으로 걸 수 있습니다(GUIDE.md 26절 실측).
+  **파드 재시작 없이 반영**되고(`users.d/` 핫리로드, `config.d` 파일 추가와
+  달리 11절의 재시작 필요 케이스에 해당하지 않음), 쿼리 레벨 `SETTINGS`로
+  여전히 오버라이드 가능해 평소엔 안전하게 막되 필요할 때만 풀 수 있습니다.
 - `max_concurrent_queries`: 동시 쿼리 수 상한. 무제한이면 쿼리 폭주 시 메모리
   압박으로 전체 서버가 흔들릴 수 있습니다. 사용자 단위로는
   `max_concurrent_queries_for_user`로 개별 애플리케이션이 클러스터 전체를

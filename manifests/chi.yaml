@@ -31,6 +31,13 @@ spec:
                 <status_info>true</status_info>
             </prometheus>
         </clickhouse>
+    profiles:
+      default/max_memory_usage: "300000000"
+      default/max_bytes_before_external_group_by: "50000000"
+      default/max_bytes_before_external_sort: "50000000"
+      default/max_bytes_ratio_before_external_sort: "0"
+      default/join_algorithm: "grace_hash"
+      default/grace_hash_join_initial_buckets: "16"
   templates:
     volumeClaimTemplates:
       - name: default-volume-claim

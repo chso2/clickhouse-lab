@@ -2048,7 +2048,108 @@ SETTINGS max_memory_usage=300000000, max_bytes_before_external_sort=50000000,
 
 ---
 
-## 26. 정리
+## 26. CHI `profiles`로 메모리/스필 설정을 클러스터 전체 기본값으로
+
+25절의 모든 검증은 매 쿼리에 `SETTINGS`를 직접 붙여서 했습니다 — 실제 운영에서는
+모든 애플리케이션/사용자가 매번 그걸 기억해서 붙여줄 거라 기대할 수 없습니다.
+Altinity Operator의 CHI `spec.configuration.profiles`로 이 설정들을 **클러스터
+전체의 기본 프로파일**로 걸어서, `SETTINGS` 없이 접속한 모든 클라이언트가
+자동으로 보호받는지 확인했습니다.
+
+### 26-1. 적용 전: 이 클러스터엔 원래 안전망이 전혀 없었다
+
+프로파일을 걸기 전, 12개 파드 중 3개를 무작위로 뽑아 확인한 기본 상태:
+
+```
+max_memory_usage: 0        (무제한!)
+max_bytes_before_external_group_by: 0   (비활성)
+join_algorithm: direct,parallel_hash,hash,ie_join   (grace_hash 없음)
+```
+
+25절에서 이미 확인했듯 이 파드들엔 `resources.limits.memory`도 없습니다. 즉
+**애플리케이션 하나가 SETTINGS 없이 무거운 쿼리를 날리면, ClickHouse 프로세스도
+막지 않고 k8s도 막지 않는** 상태였습니다.
+
+### 26-2. `manifests/chi.yaml`에 profiles 추가
+
+```yaml
+    profiles:
+      default/max_memory_usage: "300000000"
+      default/max_bytes_before_external_group_by: "50000000"
+      default/max_bytes_before_external_sort: "50000000"
+      default/max_bytes_ratio_before_external_sort: "0"
+      default/join_algorithm: "grace_hash"
+      default/grace_hash_join_initial_buckets: "16"
+```
+
+`spec.configuration.profiles`는 각 Pod의 `/etc/clickhouse-server/users.d/`로
+마운트되는 `<profiles><default>...</default></profiles>` XML을 생성합니다
+(`kubectl explain chi.spec.configuration.profiles`로 확인).
+
+```bash
+kubectl --context kind-clickhouse-lab apply -f manifests/chi.yaml
+kubectl --context kind-clickhouse-lab -n clickhouse get chi chi -w   # Completed 대기
+```
+
+### 26-3. 핵심 발견: 파드 재시작 없이 반영된다
+
+CHI 상태는 `Completed → InProgress → Completed`(약 130초)로 순환했지만,
+**12개 파드 중 단 하나도 재시작되지 않았습니다**(`RESTARTS`/`AGE` 불변). 11절에서
+"`config.d`에 새 파일을 추가하면 재시작이 필요하다"고 확인했던 것과 달리,
+`users.d/`의 프로파일 변경은 ClickHouse가 **자체적으로 핫리로드**합니다 —
+오퍼레이터가 순차적으로 ConfigMap을 갱신하는 동안(`InProgress`, 롤아웃 중간에
+확인한 스냅샷에서 12개 중 1개만 새 값 반영, 나머지는 구 값), 각 파드는 그
+변경을 감지해 프로세스 재시작 없이 새 설정을 반영했습니다.
+
+### 26-4. 검증: `SETTINGS` 없이도 25절과 동일하게 동작하는가
+
+25절에서 명시적 `SETTINGS`로 확인했던 세 가지를 이번엔 **아무 SETTINGS 없이**
+그대로 재실행했습니다.
+
+```sql
+-- 800만 그룹 GROUP BY, SETTINGS 없음 -> 성공(스필 68회, 262MB)
+-- 1500만 그룹 GROUP BY, SETTINGS 없음 -> 여전히 실패(같은 300MB 캡, 최종 병합 한계)
+-- JOIN(우측 500만 행), SETTINGS 없음 -> 성공(grace_hash 스필 32회, 165MB)
+-- ORDER BY(1억 행), SETTINGS 없음 -> 성공(정렬 스필 31회, 217MB)
+```
+
+`system.query_log`의 `ProfileEvents`로 확인한 스필 횟수·메모리 사용량이 25절의
+명시적 `SETTINGS` 버전과 **거의 동일**했습니다 — 프로파일 기본값이 정확히 같은
+보호를 제공한다는 뜻입니다. 1500만 그룹 쿼리는 25절과 마찬가지로 여전히
+실패했는데(같은 300MB 캡 + "최종 병합은 결과 크기에 비례" 한계가 그대로 적용),
+이는 프로파일 방식이 SETTINGS 방식을 완벽히 대체한다는 걸 보여주는 대조군입니다.
+
+### 26-5. 오버라이드는 여전히 가능하다
+
+```sql
+SELECT key, sum(val), count() FROM (...) GROUP BY key
+SETTINGS max_memory_usage=2000000000   -- 실패하던 1500만 그룹 쿼리가 이번엔 성공
+```
+
+프로파일 기본값(300MB)이 있어도, 특정 쿼리에서 명시적으로 더 큰 값을 주면
+정상적으로 오버라이드됩니다 — ClickHouse의 설정 우선순위(쿼리 > 프로파일 > 서버
+기본값)가 그대로 작동합니다. 즉 "평소엔 안전하게 막되, 필요할 때 관리자가 의도적으로
+풀어줄 수 있다"는 두 마리 토끼를 다 잡습니다.
+
+### 26-6. 핵심 정리
+
+| 항목 | 결과 |
+|---|---|
+| 적용 전 이 클러스터 기본 상태 | `max_memory_usage=0`(무제한), 스필 전부 비활성 — 안전망 전혀 없음 |
+| 반영 방식 | `spec.configuration.profiles` → `users.d/` → **파드 재시작 없이 핫리로드** |
+| 롤아웃 소요 | 약 130초 (12개 파드 순차 반영, `InProgress` 중간 스냅샷으로 확인) |
+| `SETTINGS` 없는 쿼리 동작 | 25절의 명시적 SETTINGS 버전과 거의 동일한 스필 횟수/메모리로 재현 |
+| 오버라이드 | 쿼리 레벨 `SETTINGS`로 여전히 가능 (우선순위: 쿼리 > 프로파일) |
+
+**운영 함의**: 25절의 발견들(스필 설정만 켜서는 부족한 숨은 게이트들)을 프로덕션에
+반영하려면 각 애플리케이션 팀에게 SETTINGS를 붙이라고 요청하는 대신, **CHI
+`profiles`로 클러스터 전체 기본값을 걸어두는 쪽이 훨씬 안전**합니다 — 클라이언트가
+무엇을 알든 모르든 동일하게 보호되고, 배포도 파드 재시작 없이(`config.d` 변경보다
+가벼움) 적용됩니다.
+
+---
+
+## 27. 정리
 
 ```bash
 kubectl --context kind-clickhouse-lab -n clickhouse delete -f manifests/minio.yaml

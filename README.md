@@ -65,6 +65,9 @@ kubectl apply -f manifests/chi.yaml
   비활성/활성 대조, `grace_hash`의 초기 버킷 수·새로 추가된
   `max_bytes_ratio_before_external_sort` 게이트처럼 "설정만 켜서는 부족한"
   숨은 조건들을 실측
+- CHI `profiles`로 메모리/스필 설정을 클러스터 전체 기본값으로 — 파드 재시작
+  없이 12개 노드 전체에 반영되고, `SETTINGS` 없는 쿼리도 동일하게 보호받는
+  것을 실측
 
 자세한 명령어와 결과는 [GUIDE.md](./GUIDE.md)에 정리돼 있습니다.
 
