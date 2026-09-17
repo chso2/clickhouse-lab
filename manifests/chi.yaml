@@ -31,6 +31,8 @@ spec:
                 <status_info>true</status_info>
             </prometheus>
         </clickhouse>
+    settings:
+      max_concurrent_queries: "8"
     profiles:
       default/max_memory_usage: "300000000"
       default/max_bytes_before_external_group_by: "50000000"

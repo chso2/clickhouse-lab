@@ -198,6 +198,23 @@ INSERT는 최소 1개의 파트를 만들고, 파트가 너무 많아지면 서�
   `max_concurrent_queries_for_user`로 개별 애플리케이션이 클러스터 전체를
   독점하지 못하게 제한하세요(GUIDE.md 20-4절 실측: 한도 초과분만 정확히
   즉시 거부됨).
+  - **`max_concurrent_queries`(서버 레벨, `spec.configuration.settings`)와
+    `max_concurrent_queries_for_user`/`_for_all_users`(프로필 레벨,
+    `spec.configuration.profiles`)는 이름은 비슷해도 다른 설정입니다** —
+    전자만 `system.server_settings`에 있고 세션 설정이 아닙니다.
+  - **대기열(큐)은 서버 레벨 한도에만 존재합니다.** `queue_max_wait_ms`
+    (초과 시 대기할 시간, 기본 0)를 프로필 레벨 한도와 함께 설정해도
+    **무시되고 즉시 거부**됩니다 — 진짜로 "잠깐 기다렸다 재시도"를
+    구현하려면 서버 레벨 `max_concurrent_queries` + `queue_max_wait_ms`
+    조합이 필수입니다(GUIDE.md 27절 실측: 대기 시간 안에 슬롯이 열리면
+    성공, 안 열리면 그 시간만큼 기다린 뒤 실패).
+  - **HTTP 인터페이스에서 이 초과 에러는 429/503이 아니라 HTTP 500으로
+    옵니다.** 실제 원인은 `X-ClickHouse-Exception-Code`(값 202) 헤더로만
+    구분되므로, HTTP 상태 코드 기반 재시도 로직을 쓰는 클라이언트라면
+    이 헤더를 함께 확인하도록 설계하세요.
+  - 권장 조합: 서버 레벨에 하드 캡 + 짧은 큐 대기, 프로필 레벨에 사용자/
+    그룹별 공정성 한도(운영자 계정은 예외 처리)를 함께 거세요
+    (GUIDE.md 27-4절).
 - **`QUOTA`로 시간당 사용량 자체를 제한**할 수도 있습니다(`CREATE QUOTA ...
   FOR INTERVAL 1 MINUTE MAX queries = N`). 단, **XML로 정의된 사용자
   (`users.xml`)에게 SQL로 새 쿼터를 연결한 직후에는 `SYSTEM RELOAD USERS`를

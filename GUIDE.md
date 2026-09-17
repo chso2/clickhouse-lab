@@ -2149,7 +2149,120 @@ SETTINGS max_memory_usage=2000000000   -- 실패하던 1500만 그룹 쿼리가 
 
 ---
 
-## 27. 정리
+## 27. Query Queue & 동시성 제한 — 대기(Queue)와 HTTP 상태 코드
+
+`max_concurrent_queries` 초과 시 정말로 "대기열"이 존재하는지, 그리고 서버
+레벨(config.xml)과 사용자 프로필 레벨(users.xml) 설정을 어떻게 조합해야
+하는지 확인했습니다.
+
+### 27-1. 서버 레벨 vs 프로필 레벨 — 이름은 비슷해도 다른 설정
+
+| 설정 | 위치 | 범위 |
+|---|---|---|
+| `max_concurrent_queries` | `system.server_settings`만 (config.xml 전용, 세션 설정 아님) | 서버 전체 |
+| `max_concurrent_queries_for_all_users` | `system.settings` (프로필/세션) | 서버 전체(프로필 경유) |
+| `max_concurrent_queries_for_user` | `system.settings` (프로필/세션) | 사용자별 |
+
+적용 전 기본값은 `max_concurrent_queries=1000`(사실상 무제한), 나머지 둘은
+`0`(무제한)이었습니다.
+
+### 27-2. 핵심 발견: `queue_max_wait_ms`는 서버 레벨 한도에만 적용된다
+
+`queue_max_wait_ms`(초과 시 대기할 시간, 기본 0=즉시 실패)를
+`max_concurrent_queries_for_all_users`/`max_concurrent_queries_for_user`와
+함께 걸어봤더니 **전혀 대기하지 않고 즉시 거부**됐습니다(0.14~0.15초).
+프로필 레벨의 두 한도는 `queue_max_wait_ms`를 아예 무시합니다.
+
+**`spec.configuration.settings`로 서버 레벨 `max_concurrent_queries`를
+직접 설정**해야 대기가 실제로 동작합니다:
+
+```yaml
+# manifests/chi.yaml
+    settings:
+      max_concurrent_queries: "8"
+```
+
+> **파드 재시작 없이 반영됐습니다** — `chop-generated-settings.xml`은
+> 11절에서 "새 파일 추가는 재시작 필요"라고 확인했던 것과 달리 이미 존재하던
+> 파일의 **내용만 수정**하는 경우라, 프로파일 변경(26절)과 마찬가지로
+> 핫리로드됐습니다(롤아웃 약 130초, 12개 파드 `RESTARTS`/`AGE` 불변).
+
+배경에 8개의 슬롯을 채운 뒤 9번째 쿼리로 세 가지 경우를 실측했습니다:
+
+| 케이스 | 배경 쿼리 소요 | `queue_max_wait_ms` | 9번째 쿼리 결과 |
+|---|---|---|---|
+| A. 기본값 | `sleep(3)` × 8 | `0` | **즉시**(0.16초) 거부 |
+| B. 대기 후 성공 | `sleep(3)` × 8 | `5000`(대기 시간 > 필요 시간) | **2.05초 대기 후 성공** — 슬롯이 열리자마자 진행 |
+| C. 대기 후 실패 | `sleep(3)` × 8 | `1000`(대기 시간 < 필요 시간) | **1.16초 대기 후** 거부(같은 `TOO_MANY_SIMULTANEOUS_QUERIES`) |
+
+케이스 B/C는 에러 메시지 자체는 동일하지만, **실패까지 걸린 시간이 다르다는
+것 자체가 "진짜로 대기했다"는 증거**입니다 — 즉시 거부(0.1초대)와 타임아웃
+후 거부(설정한 `queue_max_wait_ms`만큼 경과 후)를 로그의 소요 시간만으로도
+구분할 수 있습니다.
+
+### 27-3. HTTP 인터페이스: 429도 503도 아니라 **500**
+
+REST 관례상 "너무 많은 요청"은 429(Too Many Requests)나 503(Service
+Unavailable)을 기대하기 쉽지만, 실측 결과는 달랐습니다.
+
+```
+$ wget -S -O- 'http://localhost:8123/?query=SELECT 999 SETTINGS queue_max_wait_ms=0'
+HTTP/1.1 500 Internal Server Error
+X-ClickHouse-Exception-Code: 202
+```
+
+**HTTP 상태 코드는 그냥 500입니다.** 실제 원인(동시 쿼리 한도 초과, 내부 코드
+202/`TOO_MANY_SIMULTANEOUS_QUERIES`)은 `X-ClickHouse-Exception-Code` 헤더에만
+담겨 있습니다. HTTP 인터페이스로 ClickHouse를 호출하는 애플리케이션이 "429/503만
+재시도, 5xx는 알람"처럼 표준 REST 관례로 재시도 로직을 짰다면, **이 경우를
+놓칠 수 있습니다** — 재시도 판단은 HTTP 상태 코드가 아니라
+`X-ClickHouse-Exception-Code` 헤더(202면 재시도 가능, 다른 5xx 원인이면
+알람)로 해야 합니다.
+
+### 27-4. 서버 + 프로필 조합 가이드
+
+실전에서 권장하는 3단 구성:
+
+1. **서버 레벨(`configuration.settings`) `max_concurrent_queries`**: 이
+   서버가 절대 넘지 않을 하드 캡(전체 코어/메모리 기준 산정). `queue_max_wait_ms`도
+   여기서만 의미가 있으므로, 순간적인 버스트를 짧게 흡수하고 싶다면 이 레벨에서
+   프로필로 `queue_max_wait_ms`를 함께 설정(수 초 단위 권장 — 너무 길면 클라이언트
+   타임아웃과 충돌).
+2. **프로필 레벨(`configuration.profiles`) `max_concurrent_queries_for_user`**:
+   개별 애플리케이션/서비스 계정이 서버 전체 슬롯을 독점하지 못하게 하는
+   테넌트 간 공정성 장치. 서버 캡보다 항상 작게.
+3. **프로필 레벨 `max_concurrent_queries_for_all_users`**: 여러 사용자를 묶어
+   "일반 사용자 그룹 전체"에 서버 캡보다 낮은 한도를 걸고, 운영자 전용 계정은
+   이 한도에서 제외해 장애 상황에서도 조사용 쿼리를 실행할 수 있게 함
+   (설정 설명에 명시된 공식 사용 사례).
+
+```yaml
+    settings:
+      max_concurrent_queries: "8"            # 서버 전체 하드 캡
+    profiles:
+      default/max_concurrent_queries_for_all_users: "6"   # 일반 사용자 그룹
+      default/queue_max_wait_ms: "3000"                    # 프로필에 걸어도 무방(단, 27-2절처럼 서버 레벨 캡에만 실제 적용됨)
+      admin/max_concurrent_queries_for_all_users: "0"      # 운영자는 무제한(투자 조사용)
+```
+
+> 26절과 마찬가지로, `queue_max_wait_ms`를 프로필에 적어두는 것 자체는
+> 문법 오류가 아니지만 **서버 레벨 한도에만 실제로 작동**한다는 27-2절의
+> 발견을 반드시 감안하세요 — 프로필 레벨 한도만으로 "잠깐 기다렸다 재시도"를
+> 기대하면 안 됩니다.
+
+### 27-5. 핵심 정리
+
+| 항목 | 결과 |
+|---|---|
+| 대기열(Queue) 존재 여부 | 있음 — 단 **서버 레벨 `max_concurrent_queries` + `queue_max_wait_ms`에서만** |
+| 프로필 레벨 한도(`_for_user`, `_for_all_users`) | `queue_max_wait_ms` 무시, 항상 즉시 거부 |
+| HTTP 상태 코드 | **500**(429/503 아님) — 실제 원인은 `X-ClickHouse-Exception-Code` 헤더로 판별 |
+| 설정 반영 방식 | `config.d` 파일 내용 수정은 프로필과 마찬가지로 **파드 재시작 없이** 반영 |
+| 권장 조합 | 서버 캡(하드 리밋+짧은 큐 대기) + 프로필 레벨 사용자/그룹별 한도(공정성) + 운영자 예외 |
+
+---
+
+## 28. 정리
 
 ```bash
 kubectl --context kind-clickhouse-lab -n clickhouse delete -f manifests/minio.yaml

@@ -68,6 +68,9 @@ kubectl apply -f manifests/chi.yaml
 - CHI `profiles`로 메모리/스필 설정을 클러스터 전체 기본값으로 — 파드 재시작
   없이 12개 노드 전체에 반영되고, `SETTINGS` 없는 쿼리도 동일하게 보호받는
   것을 실측
+- Query Queue & 동시성 제한 — `queue_max_wait_ms`는 서버 레벨
+  `max_concurrent_queries`에만 적용되고 프로필 레벨 한도는 무시함을 확인,
+  HTTP 인터페이스는 429/503이 아니라 500을 반환한다는 것도 실측
 
 자세한 명령어와 결과는 [GUIDE.md](./GUIDE.md)에 정리돼 있습니다.
 
