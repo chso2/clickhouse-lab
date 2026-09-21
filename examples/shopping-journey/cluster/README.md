@@ -19,6 +19,22 @@
 2. A1: RDS 배치를 연결해 기존 방식과 비교.
 3. A5·A6: summary의 실시간 갱신·보정 방식이 정해진 뒤 구현.
 
-현재는 디렉터리와 설계 범위만 준비했습니다. 빈 SQL을 실행 가능한 구현처럼 배치하지 않았으며, 실제 DB에 적용한 변경도 없습니다.
+A2는 클러스터 DDL·샘플·대용량 생성기와 조회 SQL을 구현해 3 shard × 3 replica에서 실행 검증했습니다. A1·A3~A6은 현재 설계 범위만 준비한 상태입니다.
 
 모든 케이스는 구현 후 [데이터 결과 기준](../expected/data-result.md)을 먼저 통과해야 하며, 그다음 [성능](../expected/performance.md)과 [가용성·복구](../expected/availability-recovery.md)를 비교합니다.
+
+## 공통 원본은 한 번만 적재
+
+조회 구조 비교에서는 [common](./common/README.md)의 `shop_benchmark.shopping_events`를 한 번만 생성합니다. A1~A6은 이 불변 원본을 직접 조회하거나, 케이스별 dedup·summary 테이블에 `INSERT SELECT`로 backfill합니다. 케이스마다 합성 원본을 다시 만들지 않으므로 입력 차이와 반복 적재 시간을 제거할 수 있습니다.
+
+```text
+shop_benchmark.shopping_events
+  ├─ A1: event HLL / dedup backfill / RDS
+  ├─ A2: event HLL / dedup backfill 후 직접 count
+  ├─ A3: event에서 최초 선택 후 count
+  ├─ A4: dedup backfill 후 직접 count
+  ├─ A5: dedup·summary backfill 후 count
+  └─ A6: event HLL / dedup·summary backfill 후 count
+```
+
+원본 조회 성능과 파생 테이블 조회 성능은 공통 snapshot으로 비교합니다. MV 반영 지연과 원본 적재 처리량은 쓰기 경로 자체가 비교 대상이므로 A1~A6을 각각 초기화한 뒤 별도의 동일 입력으로 측정합니다.
