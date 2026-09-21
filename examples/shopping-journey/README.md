@@ -16,12 +16,12 @@ shopping-journey/
 ├─ cluster/
 │  ├─ README.md
 │  ├─ common/
-│  ├─ a1-event-hll_rds/
-│  ├─ a2-event-hll_dedup-query/
-│  ├─ a4-event-query/
-│  ├─ a5-dedup-query/
-│  ├─ a6-summary-query/
-│  └─ a7-event-hll_summary-query/
+│  ├─ a1-event-hll_dedup_rds/
+│  ├─ a2-event-hll_dedup-count/
+│  ├─ a3-event-count/
+│  ├─ a4-dedup-count/
+│  ├─ a5-dedup_summary-count/
+│  └─ a6-event-hll_dedup_summary-count/
 └─ docs/
    ├─ architecture.md
    └─ ddl-notes.md
@@ -40,20 +40,20 @@ shopping-journey/
 
 | 케이스 | 전체 누적 조회 | 상세 조회 |
 |---|---|---|
-| [A1](./cluster/a1-event-hll_rds/README.md) | event → HLL | RDS → 통계 조회 |
-| [A2](./cluster/a2-event-hll_dedup-query/README.md) | event → HLL | dedup → 직접 집계 |
-| [A4](./cluster/a4-event-query/README.md) | event → 최초 선택·집계 | event → 최초 선택·집계 |
-| [A5](./cluster/a5-dedup-query/README.md) | dedup → 직접 집계 | dedup → 직접 집계 |
-| [A6](./cluster/a6-summary-query/README.md) | summary → 통계 조회 | summary → 통계 조회 |
-| [A7](./cluster/a7-event-hll_summary-query/README.md) | event → HLL | summary → 통계 조회 |
+| [A1](./cluster/a1-event-hll_dedup_rds/README.md) | event → HLL | dedup → 배치 → RDS 통계 조회 |
+| [A2](./cluster/a2-event-hll_dedup-count/README.md) | event → HLL | dedup → 직접 count |
+| [A3](./cluster/a3-event-count/README.md) | event → 최초 선택 후 count | event → 최초 선택 후 count |
+| [A4](./cluster/a4-dedup-count/README.md) | dedup → 직접 count | dedup → 직접 count |
+| [A5](./cluster/a5-dedup_summary-count/README.md) | dedup → summary → count | dedup → summary → count |
+| [A6](./cluster/a6-event-hll_dedup_summary-count/README.md) | event → HLL | dedup → summary → count |
 
-A3은 비교 대상에서 제외했습니다. RDS는 클러스터 비교 케이스 중 A1에만 사용합니다. standalone의 RDS DDL은 기존 모델 보존용입니다.
+RDS는 클러스터 비교 케이스 중 A1에만 사용합니다. A1은 standalone과 같은 조회·저장 경로를 클러스터에 적용하는 기준 케이스입니다.
 
 ## 현재 상태
 
-- [standalone](./standalone/README.md): shopping_events부터 시작하는 테이블 3개·MV 2개·View 1개와 샘플을 제공합니다. 서버 실행 검증은 아직 없습니다.
+- [standalone](./standalone/README.md): shopping_events부터 시작하는 테이블 3개·MV 2개·View 1개와 샘플을 제공합니다. `clickhouse-0` 단일 노드에서 실행 검증했습니다.
 - [cluster](./cluster/README.md): 케이스별 디렉터리와 구현·검증 범위를 정리했습니다. **클러스터용 DDL·실행 스크립트는 아직 작성하지 않았습니다.**
 - [ERD](./docs/architecture.md): 기존 구조를 쇼핑몰 도메인으로 설명합니다. 모든 클러스터 케이스에 RDS가 필요하다는 의미는 아닙니다.
 - [DDL 가정](./docs/ddl-notes.md): 현재 단일 노드 SQL의 타입·키·미구현 부분을 설명합니다.
 
-다음 구현은 A2·A4·A5의 클러스터 DDL과 비교 쿼리부터 진행합니다. A1 배치와 A6·A7 실시간 summary 갱신은 별도 구현 대상입니다.
+다음 구현은 A2·A3·A4의 클러스터 DDL과 비교 쿼리부터 진행합니다. A1 배치와 A5·A6 실시간 summary 갱신은 별도 구현 대상입니다.

@@ -1,18 +1,18 @@
-# A6 · a6-summary-query
+# A5 · a5-dedup_summary-count
 
 [전체 비교](../README.md) · [공통 기준](../common/README.md)
 
 | 구분 | 경로 |
 |---|---|
-| 전체 누적 | summary → 통계 조회 |
-| 시간·고객 그룹별 | summary → 통계 조회 |
+| 전체 누적 | dedup → summary → count |
+| 시간·고객 그룹별 | dedup → summary → count |
 | 생성 흐름 | event → dedup → summary |
 | 필요한 저장 대상 | event, dedup, 상품별·그룹별 summary |
-| 계획된 독립 DB | shop_a6 |
+| 계획된 독립 DB | shop_a5 |
 
 ## 구현할 범위
 
-실시간 갱신·대표 변경 보정·재시도 정책, 통계 테이블과 조회.
+dedup에서 파생한 summary의 실시간 갱신·대표 변경 보정·재시도 정책과 count 조회를 구현합니다.
 
 현재는 케이스 정의만 작성했습니다. 클러스터용 DDL, 배포 스크립트, 실행 결과는 없습니다.
 

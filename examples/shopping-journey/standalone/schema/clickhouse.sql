@@ -1,5 +1,5 @@
 -- clickhouse-lab 추가 예제: 쇼핑몰 구매 여정 분석 / 단일 노드 ClickHouse용 DDL 초안
--- 실제 시스템에서 추출한 DDL이 아니다. 배포/실행 검증 전.
+-- 실제 시스템에서 추출한 DDL이 아니다. clickhouse-0 단일 노드에서 실행 검증했다.
 -- 새 빈 데이터베이스에 적용하는 초기 정의이며, 기존 스키마 마이그레이션이 아니다.
 -- ON CLUSTER / Distributed / 복제 / TTL은 별도 결정한다.
 -- 실험 시작점은 정규화된 shopping_events이다.
