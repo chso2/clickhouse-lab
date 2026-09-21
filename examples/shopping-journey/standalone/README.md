@@ -2,7 +2,7 @@
 
 기존 clickhouse-lab에 추가하는 독립 SQL 예제입니다. 기존 push-click-service나 Kubernetes 매니페스트를 교체하지 않습니다. 예제 데이터베이스는 `shop_analytics`, 선택적인 MySQL 통계 스키마는 `shop_reporting`입니다.
 
-[전체 케이스 안내](../README.md)
+[전체 케이스 안내](../README.md) · [데이터 결과 기준](../expected/data-result.md)
 
 ## 무엇을 다루는가
 
@@ -35,11 +35,7 @@
 
 ## 실습 순서
 
-선택한 **실습용 ClickHouse 단일 서버**에 연결한 클라이언트에서 다음 순서로 파일을 실행합니다.
-
-1. schema/clickhouse.sql — 빈 shop_analytics 데이터베이스에 예제 스키마 생성.
-2. sample-data.sql — shopping_events에 정규화된 샘플 입력.
-3. queries.sql — 원본·대표 개수와 각 통계 확인.
+선택한 **실습용 ClickHouse 단일 서버**에서 DDL → 샘플 데이터 → 조회 SQL 순서로 실행합니다.
 
 연결 명령은 사용하는 실습 서버의 주소·인증에 맞춥니다. 이 예제는 ON CLUSTER, Distributed, Replicated 엔진을 적용하지 않았으므로 현재 여러 노드의 모든 Pod에 각각 실행하지 않습니다.
 
@@ -47,18 +43,82 @@ RDS 파일은 MySQL용이며 ClickHouse에서 실행하지 않습니다. RDS 테
 
 MySQL 8.0.16 이상을 대상으로 합니다. 배치 연결의 시간대는 UTC로 설정하고, 계산한 전체 카운트로 기존 값을 교체해야 합니다. 재시도마다 더하는 방식은 중복 집계를 일으킵니다.
 
-## 샘플 기대 결과
+### 현재 kind lab에서 실행
 
-다음 기대값은 `clickhouse-0` 단일 노드 실행 결과와 일치합니다.
+저장소 루트에서 실행합니다. standalone 예제이므로 `clickhouse-0` 한 노드에만 적용합니다.
 
-| 항목 | 기대값 |
+1. 대상 Pod가 실행 중인지 확인합니다.
+
+   ```bash
+   kubectl --context kind-clickhouse-lab -n clickhouse get pod clickhouse-0
+   ```
+
+2. 빈 환경에 ClickHouse DDL을 적용합니다.
+
+   ```bash
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+     -- clickhouse-client --multiquery \
+     < examples/shopping-journey/standalone/schema/clickhouse.sql
+   ```
+
+   `shop_analytics`가 이미 존재하면 이 단계는 다시 실행하지 않습니다. 이 DDL은 초기 생성용이며 마이그레이션이나 반복 적용용 스크립트가 아닙니다.
+
+3. 생성된 객체를 확인합니다.
+
+   ```bash
+   kubectl --context kind-clickhouse-lab -n clickhouse exec clickhouse-0 -c clickhouse \
+     -- clickhouse-client -q \
+     "SELECT name, engine FROM system.tables WHERE database = 'shop_analytics' ORDER BY name FORMAT PrettyCompact"
+   ```
+
+4. 샘플 6행을 입력합니다.
+
+   ```bash
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+     -- clickhouse-client --multiquery \
+     < examples/shopping-journey/standalone/sample-data.sql
+   ```
+
+5. HLL·시간별·고객 그룹별 조회를 실행합니다.
+
+   ```bash
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+     -- clickhouse-client --multiquery --format PrettyCompact \
+     < examples/shopping-journey/standalone/queries.sql
+   ```
+
+6. 재전송을 검증하려면 4번을 한 번 더 실행한 뒤 행 수를 확인합니다.
+
+   ```bash
+   kubectl --context kind-clickhouse-lab -n clickhouse exec clickhouse-0 -c clickhouse \
+     -- clickhouse-client -q "
+       SELECT
+         (SELECT count() FROM shop_analytics.shopping_events) AS raw_rows,
+         (SELECT count() FROM shop_analytics.recent_event_keys) AS recent_rows,
+         (SELECT count() FROM shop_analytics.first_events) AS representative_rows,
+         (SELECT message_id FROM shop_analytics.first_events
+          WHERE journey_id = 'journey-a' AND event_kind = 'CLICK') AS selected_click
+       FORMAT PrettyCompact"
+   ```
+
+### 실행 결과
+
+2026-09-21에 ClickHouse `26.8.3.105`가 실행 중인 `clickhouse-0`에서 확인했습니다.
+
+| 단계 | 확인 결과 |
 |---|---|
-| 원본 행 수 | 6 |
-| 고유 여정·이벤트 조합 | 5 |
-| 09시 | NOTIFY 1 |
-| 10시 | CLICK 1, VIEW 1, CART 1, PURCHASE 1 |
-| 고객 그룹 1 | 5개 이벤트 종류 각각 1 |
-| 고객 그룹 2 | VIEW·CART·PURCHASE 각각 1 |
+| DDL 적용 | MergeTree 2개, AggregatingMergeTree 1개, MV 2개, View 1개 생성 |
+| 샘플 1회 입력 | 원본 6행, recent 6행, 대표 이벤트 5행 |
+| 시간별 집계 | 09시 NOTIFY 1, 10시 CLICK·VIEW·CART·PURCHASE 각각 1 |
+| 고객 그룹별 집계 | 그룹 1은 5종 각각 1, 그룹 2는 VIEW·CART·PURCHASE 각각 1 |
+| 동일 샘플 재입력 | 원본 12행, recent 12행, 대표 이벤트 5행 |
+| 대표 CLICK | `demo-02` 유지 |
+
+재입력 결과는 원본의 물리적 중복을 막았다는 뜻이 아닙니다. 원본과 recent에는 12행이 남고, `first_events` 조회에서 집계 상태를 병합해 대표 이벤트 5건을 반환합니다.
+
+이 결과를 단일 노드 기준값으로 사용합니다. 이후 A1~A6 클러스터 케이스도 같은 입력에 대해 [데이터 결과 기준](../expected/data-result.md)을 만족해야 합니다.
+
+## 결과 해석
 
 CLICK은 발생 시각 10시의 이벤트가 먼저 수집되고, 09:30 이벤트가 나중에 수집됩니다. 현재 예제는 **최초 수집 기준**을 유지하므로 대표 CLICK은 10시입니다. 최소 발생 시각 기준으로 전환하면 이 기대값도 달라집니다.
 

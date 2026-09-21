@@ -1,6 +1,6 @@
 # 클러스터 조회 구조 비교
 
-[전체 안내](../README.md) · [공통 실험 기준](./common/README.md)
+[전체 안내](../README.md) · [공통 실험 기준](./common/README.md) · [기대 기준](../expected/README.md)
 
 폴더 이름은 **누적 조회 경로_상세 조회 경로**를 표현합니다. 두 조회가 같은 경로이면 하나만 적습니다.
 
@@ -20,3 +20,5 @@
 3. A5·A6: summary의 실시간 갱신·보정 방식이 정해진 뒤 구현.
 
 현재는 디렉터리와 설계 범위만 준비했습니다. 빈 SQL을 실행 가능한 구현처럼 배치하지 않았으며, 실제 DB에 적용한 변경도 없습니다.
+
+모든 케이스는 구현 후 [데이터 결과 기준](../expected/data-result.md)을 먼저 통과해야 하며, 그다음 [성능](../expected/performance.md)과 [가용성·복구](../expected/availability-recovery.md)를 비교합니다.

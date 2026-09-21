@@ -22,6 +22,11 @@ shopping-journey/
 │  ├─ a4-dedup-count/
 │  ├─ a5-dedup_summary-count/
 │  └─ a6-event-hll_dedup_summary-count/
+├─ expected/
+│  ├─ README.md
+│  ├─ data-result.md
+│  ├─ performance.md
+│  └─ availability-recovery.md
 └─ docs/
    ├─ architecture.md
    └─ ddl-notes.md
@@ -55,5 +60,6 @@ RDS는 클러스터 비교 케이스 중 A1에만 사용합니다. A1은 standal
 - [cluster](./cluster/README.md): 케이스별 디렉터리와 구현·검증 범위를 정리했습니다. **클러스터용 DDL·실행 스크립트는 아직 작성하지 않았습니다.**
 - [ERD](./docs/architecture.md): 기존 구조를 쇼핑몰 도메인으로 설명합니다. 모든 클러스터 케이스에 RDS가 필요하다는 의미는 아닙니다.
 - [DDL 가정](./docs/ddl-notes.md): 현재 단일 노드 SQL의 타입·키·미구현 부분을 설명합니다.
+- [기대 기준](./expected/README.md): 데이터 결과, 성능, 가용성·복구를 분리해 단일 노드와 A1~A6을 평가합니다.
 
 다음 구현은 A2·A3·A4의 클러스터 DDL과 비교 쿼리부터 진행합니다. A1 배치와 A5·A6 실시간 summary 갱신은 별도 구현 대상입니다.

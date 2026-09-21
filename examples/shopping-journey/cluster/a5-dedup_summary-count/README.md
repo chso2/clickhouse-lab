@@ -1,6 +1,6 @@
 # A5 · a5-dedup_summary-count
 
-[전체 비교](../README.md) · [공통 기준](../common/README.md)
+[전체 비교](../README.md) · [공통 기준](../common/README.md) · [기대 기준](../../expected/README.md)
 
 | 구분 | 경로 |
 |---|---|
