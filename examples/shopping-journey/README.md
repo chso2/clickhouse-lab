@@ -57,7 +57,7 @@ RDS는 클러스터 비교 케이스 중 A1에만 사용합니다. A1은 standal
 ## 현재 상태
 
 - [standalone](./standalone/README.md): shopping_events부터 시작하는 테이블 3개·MV 2개·View 1개와 샘플을 제공합니다. `clickhouse-0` 단일 노드에서 실행 검증했습니다.
-- [cluster](./cluster/README.md): 케이스별 구현·검증 범위를 정리했습니다. A2는 클러스터 DDL과 고정·대용량 데이터 검증을 완료했고, 나머지는 설계 단계입니다.
+- [cluster](./cluster/README.md): 케이스별 구현·검증 범위를 정리했습니다. A2 dedup 직접 조회와 A3 event 직접 count의 클러스터·대용량 검증을 완료했고, 나머지는 설계 단계입니다.
 - [ERD](./docs/architecture.md): 기존 구조를 쇼핑몰 도메인으로 설명합니다. 모든 클러스터 케이스에 RDS가 필요하다는 의미는 아닙니다.
 - [DDL 가정](./docs/ddl-notes.md): 현재 단일 노드 SQL의 타입·키·미구현 부분을 설명합니다.
 - [기대 기준](./expected/README.md): 데이터 결과, 성능, 가용성·복구를 분리해 단일 노드와 A1~A6을 평가합니다.

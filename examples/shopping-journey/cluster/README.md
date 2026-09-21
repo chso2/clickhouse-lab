@@ -19,7 +19,7 @@
 2. A1: RDS 배치를 연결해 기존 방식과 비교.
 3. A5·A6: summary의 실시간 갱신·보정 방식이 정해진 뒤 구현.
 
-A2는 클러스터 DDL·샘플·대용량 생성기와 조회 SQL을 구현해 3 shard × 3 replica에서 실행 검증했습니다. A1·A3~A6은 현재 설계 범위만 준비한 상태입니다.
+A2는 dedup state 직접 조회, A3는 event 원본의 shard-local exact count를 구현해 3 shard × 3 replica에서 실행 검증했습니다. A1·A4~A6은 현재 설계 범위만 준비한 상태입니다.
 
 모든 케이스는 구현 후 [데이터 결과 기준](../expected/data-result.md)을 먼저 통과해야 하며, 그다음 [성능](../expected/performance.md)과 [가용성·복구](../expected/availability-recovery.md)를 비교합니다.
 
