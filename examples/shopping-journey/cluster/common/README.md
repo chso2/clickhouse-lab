@@ -69,14 +69,21 @@ dedup event      110,500
 
 XML로 `cluster_internal` 사용자를 정의한 환경에서는 이 계정에 `GRANT SELECT, INSERT ON shop_benchmark.*`가 있어야 합니다. ConfigMap의 사용자 정의를 변경했다면 ClickHouse StatefulSet을 순차 재시작해 모든 Pod에 반영한 뒤 진행합니다.
 
+기본값은 `manifests/chi.yaml` 배포의 `chi-chi-cluster1-0-0-0`입니다. free operator 배포에서는 실행 전에 `export LAB_CLICKHOUSE_POD=clickhouse-0`으로 바꿉니다.
+
+대용량 생성 스크립트는 ClickHouse 프로필의 낮은 기본값에 영향을 받지 않도록 쿼리별 `max_memory_usage`를 기본 2GB로 지정합니다. 실행 전에 Pod와 로컬 VM의 여유 메모리를 확인하고, 환경에 맞춰 `LAB_MAX_MEMORY_USAGE`를 조정합니다.
+
 ```bash
-kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+export LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-chi-chi-cluster1-0-0-0}
+
+kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
   -- clickhouse-client --multiquery \
   < examples/shopping-journey/cluster/common/schema.sql
 
-examples/shopping-journey/cluster/common/run-generate-data.sh
+LAB_MAX_MEMORY_USAGE=2000000000 \
+  examples/shopping-journey/cluster/common/run-generate-data.sh
 
-kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
   -- clickhouse-client --multiquery --format PrettyCompact \
   < examples/shopping-journey/cluster/common/validate-data.sql
 ```
@@ -87,7 +94,7 @@ kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clic
 
 ## 실행 결과
 
-2026-09-21, ClickHouse `26.8.6.5`, 3 shard × 3 replica에서 확인했습니다.
+2026-09-21, ClickHouse `26.8.6.5`, `GUIDE(free operator).md`의 별도 3 shard × 3 replica 배포에서 확인했습니다. 저장소 기본 `manifests/chi.yaml`의 4 shard × 3 replica 배포 결과가 아닙니다.
 
 | 항목 | 결과 |
 |---|---:|

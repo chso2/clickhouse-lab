@@ -19,7 +19,14 @@
 2. A1: RDS 배치를 연결해 기존 방식과 비교.
 3. A5·A6: summary의 실시간 갱신·보정 방식이 정해진 뒤 구현.
 
-A2는 dedup state 직접 조회, A3는 event 원본의 shard-local exact count를 구현해 3 shard × 3 replica에서 실행 검증했습니다. A1·A4~A6은 현재 설계 범위만 준비한 상태입니다.
+A2는 event HLL과 dedup state 직접 조회, A3는 event 원본의 shard-local exact count, A4는 dedup state 기반 전체 exact count를 구현했습니다. 아래 성능값은 `GUIDE(free operator).md`의 별도 3 shard × 3 replica 구성에서 실행해 얻었습니다. 저장소의 기본 `manifests/chi.yaml`은 Altinity Operator 기반 4 shard × 3 replica 구성이므로 동일한 측정 환경이 아닙니다. A1·A5·A6은 현재 설계 범위만 준비한 상태입니다.
+
+| 구분 | 토폴로지 | 대표 Pod 이름 | 용도 |
+|---|---|---|---|
+| 저장소 기본 배포 | 4 shard × 3 replica | `chi-chi-cluster1-{0,1,2,3}-0-0` | `manifests/chi.yaml` 기반 재현 |
+| 기존 성능 측정 배포 | 3 shard × 3 replica | `clickhouse-0`, `clickhouse-3`, `clickhouse-6` | free operator 가이드 기반 측정 |
+
+DDL은 `{shard}`, `{replica}` 매크로와 `cityHash64(journey_id)` 샤딩을 사용하므로 두 토폴로지에 모두 적용할 수 있습니다. 실행 결과를 비교할 때는 shard 수, ClickHouse 버전과 Pod 자원을 함께 기록합니다.
 
 모든 케이스는 구현 후 [데이터 결과 기준](../expected/data-result.md)을 먼저 통과해야 하며, 그다음 [성능](../expected/performance.md)과 [가용성·복구](../expected/availability-recovery.md)를 비교합니다.
 

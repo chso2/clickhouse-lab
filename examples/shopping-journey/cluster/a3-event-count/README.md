@@ -53,6 +53,12 @@ A3는 dedup·summary 데이터를 별도로 저장하지 않습니다. 요청이
 
 공통 데이터 22,200,000행이 검증된 상태에서 저장소 루트에서 실행합니다.
 
+기본 `manifests/chi.yaml` 배포는 다음 기본값을 그대로 사용합니다. free operator 배포에서는 `export LAB_CLICKHOUSE_POD=clickhouse-0`으로 바꿉니다.
+
+```bash
+export LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-chi-chi-cluster1-0-0-0}
+```
+
 1. `cluster_internal` 사용자에 다음 권한을 추가합니다.
 
    ```xml
@@ -64,7 +70,7 @@ A3는 dedup·summary 데이터를 별도로 저장하지 않습니다. 요청이
 2. A3 View를 생성합니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery \
      < examples/shopping-journey/cluster/a3-event-count/schema.sql
    ```
@@ -72,7 +78,7 @@ A3는 dedup·summary 데이터를 별도로 저장하지 않습니다. 요청이
 3. 분산 상품 1개의 기대 결과를 검증합니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery --format PrettyCompact \
      < examples/shopping-journey/cluster/a3-event-count/check-results.sql
    ```
@@ -80,7 +86,7 @@ A3는 dedup·summary 데이터를 별도로 저장하지 않습니다. 요청이
 4. 상품을 지정해 세 조회를 실행합니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery --format PrettyCompact \
      --param_product_id=1000000 \
      < examples/shopping-journey/cluster/a3-event-count/queries.sql
@@ -90,7 +96,7 @@ A3는 dedup·summary 데이터를 별도로 저장하지 않습니다. 요청이
 
 ## 실행 결과
 
-2026-09-21, ClickHouse `26.8.6.5`, 3 shard × 3 replica와 공통 원본 snapshot에서 확인했습니다. 현재 결과는 동시성 1의 [1차 예비 측정](../common/README.md#공통-원본-조회-기준값)입니다.
+2026-09-21, ClickHouse `26.8.6.5`, `GUIDE(free operator).md`의 별도 3 shard × 3 replica 배포와 공통 원본 snapshot에서 확인했습니다. 저장소 기본 `manifests/chi.yaml`의 4 shard × 3 replica 배포 결과가 아닙니다. 현재 결과는 동시성 1의 [1차 예비 측정](../common/README.md#공통-원본-조회-기준값)입니다.
 
 ### 정확성
 

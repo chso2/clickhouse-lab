@@ -4,7 +4,8 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LAB_KUBE_CONTEXT=${LAB_KUBE_CONTEXT:-kind-clickhouse-lab}
 LAB_NAMESPACE=${LAB_NAMESPACE:-clickhouse}
-LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-clickhouse-0}
+LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-chi-chi-cluster1-0-0-0}
+LAB_MAX_MEMORY_USAGE=${LAB_MAX_MEMORY_USAGE:-2000000000}
 CHUNK_SIZE=1000000
 TOTAL_JOURNEYS_PER_CLASS=10000000
 
@@ -31,6 +32,7 @@ for hot_product in 0 1; do
     kubectl --context "$LAB_KUBE_CONTEXT" -n "$LAB_NAMESPACE" \
       exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse -- \
       clickhouse-client --multiquery \
+      --max_memory_usage="$LAB_MAX_MEMORY_USAGE" \
       --param_journey_offset="$journey_offset" \
       --param_journey_count="$CHUNK_SIZE" \
       --param_hot_product="$hot_product" \

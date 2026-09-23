@@ -45,16 +45,22 @@ first_event_states (Distributed)
 | [run-performance-data.sh](./run-performance-data.sh) | 20개 chunk를 순서대로 실행하는 스크립트 |
 | [check-performance-data.sql](./check-performance-data.sql) | 성능 데이터의 분포·대표 event·HLL 오차 검증 |
 | [backfill-from-common.sql](./backfill-from-common.sql) | 공통 원본의 로컬 shard에서 A2 dedup state 생성 |
-| [run-backfill-from-common.sh](./run-backfill-from-common.sh) | shard별 대표 replica 3곳에서 backfill 순차 실행 |
+| [run-backfill-from-common.sh](./run-backfill-from-common.sh) | shard별 대표 replica를 인자로 받아 backfill 순차 실행 |
 
 ## 실행 순서
 
 저장소 루트에서 실행합니다.
 
+기본 `manifests/chi.yaml` 배포는 다음 기본값을 그대로 사용합니다. free operator 배포에서는 `export LAB_CLICKHOUSE_POD=clickhouse-0`으로 바꿉니다.
+
+```bash
+export LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-chi-chi-cluster1-0-0-0}
+```
+
 1. 실제 토폴로지를 확인합니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client -q "
        SELECT shard_num, replica_num, host_name
        FROM system.clusters
@@ -62,10 +68,10 @@ first_event_states (Distributed)
        ORDER BY shard_num, replica_num"
    ```
 
-2. A2 스키마를 9개 ClickHouse Pod에 생성합니다.
+2. A2 스키마를 `cluster1`의 모든 ClickHouse Pod에 생성합니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery \
      < examples/shopping-journey/cluster/a2-event-hll_dedup-count/schema.sql
    ```
@@ -73,11 +79,11 @@ first_event_states (Distributed)
 3. 고정 샘플을 넣고 결과를 확인합니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery \
      < examples/shopping-journey/cluster/a2-event-hll_dedup-count/sample-data.sql
 
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery --format PrettyCompact \
      < examples/shopping-journey/cluster/a2-event-hll_dedup-count/queries.sql
    ```
@@ -85,11 +91,12 @@ first_event_states (Distributed)
 4. 대용량 데이터는 `journey_count`를 지정해 생성합니다. 먼저 100만으로 검증하고 자원 여유를 확인한 뒤 1천만 이상으로 높입니다.
 
    ```bash
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
-     -- clickhouse-client --multiquery --param_journey_count=1000000 \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
+     -- clickhouse-client --multiquery --max_memory_usage=2000000000 \
+     --param_journey_count=1000000 \
      < examples/shopping-journey/cluster/a2-event-hll_dedup-count/generate-large-data.sql
 
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery --param_journey_count=1000000 --format PrettyCompact \
      < examples/shopping-journey/cluster/a2-event-hll_dedup-count/check-large-data.sql
    ```
@@ -107,9 +114,10 @@ first_event_states (Distributed)
 5. A2 자체의 실시간 MV·적재 처리량을 독립적으로 측정할 때만 A2 DB에 성능 데이터를 생성합니다. A1~A6 조회 비교에서는 이 단계를 실행하지 않고 공통 원본을 사용합니다.
 
    ```bash
-   examples/shopping-journey/cluster/a2-event-hll_dedup-count/run-performance-data.sh
+   LAB_MAX_MEMORY_USAGE=2000000000 \
+     examples/shopping-journey/cluster/a2-event-hll_dedup-count/run-performance-data.sh
 
-   kubectl --context kind-clickhouse-lab -n clickhouse exec -i clickhouse-0 -c clickhouse \
+   kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD" -c clickhouse \
      -- clickhouse-client --multiquery --format PrettyCompact \
      < examples/shopping-journey/cluster/a2-event-hll_dedup-count/check-performance-data.sql
    ```
@@ -127,8 +135,15 @@ first_event_states (Distributed)
 6. A1~A6 조회 비교에서는 공통 원본 적재가 끝난 뒤 A2 dedup state만 backfill합니다.
 
    ```bash
+   # 기본 manifests/chi.yaml: 4 shard의 대표 replica가 기본값입니다.
    examples/shopping-journey/cluster/a2-event-hll_dedup-count/run-backfill-from-common.sh
+
+   # GUIDE(free operator).md: 3 shard의 대표 replica를 명시합니다.
+   examples/shopping-journey/cluster/a2-event-hll_dedup-count/run-backfill-from-common.sh \
+     clickhouse-0 clickhouse-3 clickhouse-6
    ```
+
+   인자를 생략하면 기본 Operator 4-shard 대표 Pod인 `chi-chi-cluster1-{0,1,2,3}-0-0`을 사용합니다. 다른 Pod 이름은 위치 인자 또는 공백으로 구분한 `LAB_BACKFILL_PODS`로 전달할 수 있습니다. backfill은 `max_memory_usage=4GB`, `max_bytes_before_external_group_by=512MiB`를 기본 적용하며 환경 변수로 조정할 수 있습니다.
 
    backfill 스크립트는 기존 dedup state가 한 행이라도 있으면 중복 실행을 막기 위해 중단합니다. 3단계의 고정 샘플이나 5단계의 독립 성능 데이터를 실행한 DB를 재사용하지 말고, 공통 snapshot 비교용 `shop_a2`를 새로 생성해 실행합니다.
 
@@ -136,7 +151,7 @@ first_event_states (Distributed)
 
 ## 실행 결과
 
-2026-09-21, ClickHouse `26.8.3.105`, 3 shard × 3 replica에서 확인했습니다.
+2026-09-21, ClickHouse `26.8.3.105`, `GUIDE(free operator).md`의 별도 3 shard × 3 replica 배포에서 확인했습니다. 저장소 기본 `manifests/chi.yaml`의 4 shard × 3 replica 배포 결과가 아닙니다.
 
 ### 고정 샘플
 
@@ -194,7 +209,7 @@ first_event_states (Distributed)
 
 ### 공통 snapshot 기반 A2 재시험
 
-2026-09-21, ClickHouse `26.8.6.5`에서 검증을 통과한 공통 원본 22,200,000행을 사용했습니다. A2 원본은 다시 적재하지 않았습니다.
+2026-09-21, ClickHouse `26.8.6.5`, `GUIDE(free operator).md`의 별도 3 shard × 3 replica 배포에서 검증을 통과한 공통 원본 22,200,000행을 사용했습니다. A2 원본은 다시 적재하지 않았습니다.
 
 이 결과는 [공통 실험 기준의 성능 측정 해석](../common/README.md#공통-원본-조회-기준값)을 따르는 1차 예비 측정입니다. 표의 `반복` 열이 실제 실행 횟수이며, 모든 조회를 10회씩 수행한 결과는 아닙니다.
 

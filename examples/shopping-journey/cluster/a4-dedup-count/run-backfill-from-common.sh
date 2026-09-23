@@ -18,16 +18,16 @@ LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-$1}
 
 existing_states=$(kubectl --context "$LAB_KUBE_CONTEXT" -n "$LAB_NAMESPACE" \
   exec "$LAB_CLICKHOUSE_POD" -c clickhouse -- \
-  clickhouse-client -q "SELECT count() FROM shop_a2.first_event_states")
+  clickhouse-client -q "SELECT count() FROM shop_a4.first_event_states")
 
 if [ "$existing_states" -ne 0 ]; then
-  echo "A2 dedup state가 이미 ${existing_states}행 있습니다. 빈 shop_a2 DB에서 실행하세요." >&2
+  echo "A4 dedup state가 이미 ${existing_states}행 있습니다. 빈 shop_a4 DB에서 실행하세요." >&2
   exit 1
 fi
 
 # 각 shard의 대표 replica 한 곳에서 실행한다. 로컬 INSERT 결과는 같은 shard의 replica로 복제된다.
 for pod in $representative_pods; do
-  echo "[$pod] common event -> A2 dedup backfill"
+  echo "[$pod] common event -> A4 dedup backfill"
   kubectl --context "$LAB_KUBE_CONTEXT" -n "$LAB_NAMESPACE" \
     exec -i "$pod" -c clickhouse -- \
     clickhouse-client --multiquery \
