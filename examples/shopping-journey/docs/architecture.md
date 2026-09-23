@@ -47,6 +47,19 @@ shopping_events에는 상품·여정 매핑과 이벤트 판정이 완료된 데
 이 문서 아래의 상위 테이블과 MV는 실행용 DDL에 포함되지 않습니다.
 RDS 배치와 summary 갱신은 별도 케이스이며 아직 구현되지 않았습니다.
 
+## 이벤트별 최초 데이터와 ClickHouse Summary 개선안
+
+아래 그림은 [A7](../cluster/a7-event-replacing_summary-count/README.md)에서 검증할 구조입니다. 이벤트 종류별로 최초 구매 여정 이벤트를 관리하고, 누적 지표와 시간 지표를 ClickHouse 내부 Summary로 제공합니다.
+
+![쇼핑몰 구매 여정 집계 아키텍처](./event-summary-architecture.svg)
+
+- `view_event`, `cart_event`, `click_event`, `purchase_event`, `notification_event`는 상품·여정별 가장 빠른 이벤트를 선택하는 `ReplacingMergeTree`입니다.
+- 행동 이벤트의 누적값은 `uniqExactState(journey_id)`로 중복을 제거합니다.
+- S3에서 이미 집계되어 들어오는 `notification_count`는 여정 단위 unique 계산을 거치지 않고 발송 지표 상태에 직접 합산합니다.
+- `notification_raw`는 고객 그룹과 최초 발생 시각처럼 여정 단위 정보가 필요한 조회 경로에 사용합니다. 같은 발송을 `notification_count`와 `notification_raw` 양쪽에서 누적 합산하지 않습니다.
+- 최초 발생 시각 기준 시간 지표는 변경된 상품을 `FINAL`로 다시 계산하고, 더 높은 `summary_version`으로 시간 Summary에 기록합니다.
+- Summary의 집계 키에는 `journey_id`를 넣지 않습니다. 누적 Summary에서만 aggregate state 내부 중복 제거 값으로 사용합니다.
+
 ## 전체 참고 구조
 
 사각형은 테이블, 둥근 노드는 MV 또는 처리 작업입니다. 실선은 처리 흐름이고 점선은 참조·조회 관계입니다.

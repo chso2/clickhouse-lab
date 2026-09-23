@@ -15,7 +15,7 @@
 
 ## 데이터와 배포 분리
 
-조회 비교용 원본은 `shop_benchmark.shopping_events`에 한 번만 적재하고 이후 변경하지 않습니다. A1~A6은 공통 원본을 직접 조회하거나 각 케이스의 dedup·summary 테이블로 backfill합니다. 이미 들어간 데이터를 MV가 자동 처리하지 않으므로 초기 파생 데이터는 명시적인 `INSERT SELECT`로 생성합니다.
+조회 비교용 원본은 `shop_benchmark.shopping_events`에 한 번만 적재하고 이후 변경하지 않습니다. A1~A7은 공통 원본을 직접 조회하거나 각 케이스의 dedup·summary 테이블로 backfill합니다. 이미 들어간 데이터를 MV가 자동 처리하지 않으므로 초기 파생 데이터는 명시적인 `INSERT SELECT`로 생성합니다.
 
 각 케이스는 `shop_a1`부터 `shop_a6`까지 별도 DB를 사용합니다. 모든 케이스의 MV를 공통 원본에 동시에 연결하지 않습니다. 실시간 MV 반영과 적재 처리량은 케이스별 쓰기 부하가 달라지므로 공통 snapshot 조회와 분리해 각각 독립 적재로 측정합니다.
 
@@ -88,7 +88,7 @@ kubectl --context kind-clickhouse-lab -n clickhouse exec -i "$LAB_CLICKHOUSE_POD
   < examples/shopping-journey/cluster/common/validate-data.sql
 ```
 
-검증 SQL의 모든 `passed`가 1이고 replica queue가 0인 snapshot만 A1~A6 조회 비교에 사용합니다. 실패한 적재 결과에 추가 INSERT로 맞추지 않고 깨끗한 공통 DB에서 다시 생성합니다.
+검증 SQL의 모든 `passed`가 1이고 replica queue가 0인 snapshot만 A1~A7 조회 비교에 사용합니다. 실패한 적재 결과에 추가 INSERT로 맞추지 않고 깨끗한 공통 DB에서 다시 생성합니다. A7은 같은 입력을 사용하되 최소 `occurred_at` 기준의 전용 기대값으로 판정합니다.
 
 각 chunk는 동기적으로 완료된 뒤 다음 범위를 실행합니다. `insert_deduplication_token`을 INSERT 전체에 고정하면 Distributed 입력이 여러 블록으로 분할될 때 정상 블록까지 중복으로 판단될 수 있으므로 사용하지 않습니다. 실행 스크립트는 기존 행이 있으면 중단해 전체 재실행에 의한 중복을 방지합니다.
 

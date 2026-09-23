@@ -99,7 +99,7 @@ export LAB_CLICKHOUSE_POD=${LAB_CLICKHOUSE_POD:-chi-chi-cluster1-0-0-0}
 
    `1000000`은 journey 100,000개의 분산 상품이고 `2000000`은 journey 10,000,000개의 대규모 집중 상품입니다.
 
-공통 원본에 `first_event_mv`가 연결된 뒤 들어오는 새 event는 A4 state에도 반영됩니다. A1~A6의 적재 성능을 비교할 때는 다른 케이스의 MV를 함께 연결하지 않고 케이스마다 독립적으로 측정해야 합니다.
+공통 원본에 `first_event_mv`가 연결된 뒤 들어오는 새 event는 A4 state에도 반영됩니다. A1~A7의 적재 성능을 비교할 때는 다른 케이스의 MV를 함께 연결하지 않고 케이스마다 독립적으로 측정해야 합니다.
 
 ## 실행 결과
 
