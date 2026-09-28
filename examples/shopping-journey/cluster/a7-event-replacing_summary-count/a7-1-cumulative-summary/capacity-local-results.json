@@ -1,0 +1,748 @@
+{
+  "scope": "Local ARM64 Colima/kind smoke test; shared 6-vCPU/16-GiB VM; not AWS r7i.large throughput",
+  "clickhouse_version": "26.9.4.3",
+  "clickhouse_image_digest": "sha256:317c280a2334651a54b3e07201c2de4c09588b8e66e64f719cee26d0f434ca81",
+  "keeper_image_digest": "sha256:3a2651415cccdfbbdcdd84cc755109c07eae49a75c90511547053752d9f67af7",
+  "clickhouse_cpu_limit": 2,
+  "clickhouse_memory_limit_bytes": 17179869184,
+  "clickhouse_server_memory_budget_bytes": 4294967296,
+  "data_storage": "emptyDir on shared local disk; EBS not emulated",
+  "topology": "1 shard, 1 replica, 1 isolated Keeper",
+  "runs": [
+    {
+      "database": "a7_capacity_20260928_085407_7966708f",
+      "profile_label": "local-2cpu-shared-vm-4GiB-server-budget",
+      "benchmark_source_sha256": null,
+      "server": [
+        {
+          "version": "26.9.4.3",
+          "hostname": "clickhouse",
+          "timezone": "UTC"
+        }
+      ],
+      "parameters": {
+        "profile_label": "local-2cpu-shared-vm-4GiB-server-budget",
+        "seed_rows": 1000000,
+        "seed_batch_size": 10000,
+        "batch_size": 1000,
+        "products": 2000,
+        "hot_percent": 50,
+        "rates": [
+          400,
+          4000
+        ],
+        "read_qps": [
+          10,
+          50
+        ],
+        "read_workers": 64,
+        "duration": 30.0,
+        "read_p95_ms": 1000,
+        "allowed_drain_seconds": 1.0,
+        "max_drain_seconds": 30,
+        "sample_interval": 2,
+        "max_threads": 2,
+        "timeout": 90,
+        "first_event_check": true,
+        "store_raw": true,
+        "cleanup": true,
+        "output": "/Users/a451349/projects/clickhouse-lab/examples/shopping-journey/cluster/a7-event-replacing_summary-count/a7-1-cumulative-summary/capacity-results"
+      },
+      "seed_seconds": 44.621,
+      "seed_correctness": {
+        "passed": true,
+        "summary_mismatches": [],
+        "final_counts": [
+          {
+            "event": "VIEW",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "CART",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "CLICK",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "PURCHASE",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "NOTIFY",
+            "actual": 181819,
+            "expected": 181819,
+            "passed": true
+          }
+        ],
+        "raw_rows": 1000000,
+        "expected_raw_rows": 1000000
+      },
+      "database_removed": true,
+      "cases": [
+        {
+          "case": "r400_q10",
+          "offered_events_per_second": 400,
+          "offered_read_qps": 10,
+          "offered_rows": 12000,
+          "completed_rows": 12000,
+          "writer_elapsed_seconds": 30.358,
+          "achieved_events_per_second": 395.28,
+          "writer_drain_seconds": 0.358,
+          "batch_latency": {
+            "count": 12,
+            "p50_ms": 336.45,
+            "p95_ms": 396.888,
+            "p99_ms": 396.888,
+            "max_ms": 396.888
+          },
+          "first_lookup_latency": {
+            "count": 12,
+            "p50_ms": 54.239,
+            "p95_ms": 71.02,
+            "p99_ms": 71.02,
+            "max_ms": 71.02
+          },
+          "read_latency": {
+            "count": 300,
+            "p50_ms": 8.075,
+            "p95_ms": 20.846,
+            "p99_ms": 278.949,
+            "max_ms": 546.049
+          },
+          "read_requests": {
+            "offered": 300,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "insert",
+              "queries": 72,
+              "server_p95_ms": 84,
+              "max_query_memory_bytes": 4775877,
+              "read_rows": 24000,
+              "query_cpu_seconds": 0.030604
+            },
+            {
+              "operation": "lookup",
+              "queries": 60,
+              "server_p95_ms": 13,
+              "max_query_memory_bytes": 9686550,
+              "read_rows": 10969102,
+              "query_cpu_seconds": 0.719462
+            },
+            {
+              "operation": "read",
+              "queries": 300,
+              "server_p95_ms": 13,
+              "max_query_memory_bytes": 7782281,
+              "read_rows": 796914,
+              "query_cpu_seconds": 1.538464
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1012000,
+            "expected_raw_rows": 1012000
+          },
+          "passed": true,
+          "observed_resources": {
+            "cpu_quota_percent_mean": 8.896,
+            "cpu_quota_percent_max": 19.29,
+            "cgroup_memory_used_max_bytes": 536810080,
+            "active_parts_start": 50,
+            "active_parts_end": 52,
+            "replication_queue_max": 0,
+            "sample_interval_seconds": 2
+          }
+        },
+        {
+          "case": "r4000_q10",
+          "offered_events_per_second": 4000,
+          "offered_read_qps": 10,
+          "offered_rows": 120000,
+          "completed_rows": 120000,
+          "writer_elapsed_seconds": 41.245,
+          "achieved_events_per_second": 2909.47,
+          "writer_drain_seconds": 11.245,
+          "batch_latency": {
+            "count": 120,
+            "p50_ms": 327.436,
+            "p95_ms": 368.169,
+            "p99_ms": 386.986,
+            "max_ms": 430.994
+          },
+          "first_lookup_latency": {
+            "count": 120,
+            "p50_ms": 51.992,
+            "p95_ms": 72.972,
+            "p99_ms": 104.937,
+            "max_ms": 117.925
+          },
+          "read_latency": {
+            "count": 300,
+            "p50_ms": 6.603,
+            "p95_ms": 11.53,
+            "p99_ms": 21.158,
+            "max_ms": 23.389
+          },
+          "read_requests": {
+            "offered": 300,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "read",
+              "queries": 300,
+              "server_p95_ms": 5,
+              "max_query_memory_bytes": 7781801,
+              "read_rows": 707141,
+              "query_cpu_seconds": 1.089756
+            },
+            {
+              "operation": "insert",
+              "queries": 720,
+              "server_p95_ms": 86,
+              "max_query_memory_bytes": 4775861,
+              "read_rows": 240000,
+              "query_cpu_seconds": 0.228109
+            },
+            {
+              "operation": "lookup",
+              "queries": 600,
+              "server_p95_ms": 11,
+              "max_query_memory_bytes": 9719078,
+              "read_rows": 116858954,
+              "query_cpu_seconds": 6.484571
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 205819,
+                "expected": 205819,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1132000,
+            "expected_raw_rows": 1132000
+          },
+          "passed": false,
+          "observed_resources": {
+            "cpu_quota_percent_mean": 18.826,
+            "cpu_quota_percent_max": 31.404,
+            "cgroup_memory_used_max_bytes": 695883352,
+            "active_parts_start": 48,
+            "active_parts_end": 40,
+            "replication_queue_max": 0,
+            "sample_interval_seconds": 2
+          }
+        },
+        {
+          "case": "r400_q50",
+          "offered_events_per_second": 400,
+          "offered_read_qps": 50,
+          "offered_rows": 12000,
+          "completed_rows": 12000,
+          "writer_elapsed_seconds": 30.373,
+          "achieved_events_per_second": 395.09,
+          "writer_drain_seconds": 0.373,
+          "batch_latency": {
+            "count": 12,
+            "p50_ms": 358.594,
+            "p95_ms": 600.331,
+            "p99_ms": 600.331,
+            "max_ms": 600.331
+          },
+          "first_lookup_latency": {
+            "count": 12,
+            "p50_ms": 71.495,
+            "p95_ms": 192.868,
+            "p99_ms": 192.868,
+            "max_ms": 192.868
+          },
+          "read_latency": {
+            "count": 1500,
+            "p50_ms": 5.966,
+            "p95_ms": 11.986,
+            "p99_ms": 26.665,
+            "max_ms": 83.964
+          },
+          "read_requests": {
+            "offered": 1500,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "read",
+              "queries": 1500,
+              "server_p95_ms": 5,
+              "max_query_memory_bytes": 7781897,
+              "read_rows": 3643419,
+              "query_cpu_seconds": 5.039288
+            },
+            {
+              "operation": "insert",
+              "queries": 72,
+              "server_p95_ms": 89,
+              "max_query_memory_bytes": 4775877,
+              "read_rows": 24000,
+              "query_cpu_seconds": 0.027307
+            },
+            {
+              "operation": "lookup",
+              "queries": 60,
+              "server_p95_ms": 27,
+              "max_query_memory_bytes": 9686758,
+              "read_rows": 12385582,
+              "query_cpu_seconds": 0.717373
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1144000,
+            "expected_raw_rows": 1144000
+          },
+          "passed": true,
+          "observed_resources": {
+            "cpu_quota_percent_mean": 16.507,
+            "cpu_quota_percent_max": 34.284,
+            "cgroup_memory_used_max_bytes": 659280344,
+            "active_parts_start": 33,
+            "active_parts_end": 38,
+            "replication_queue_max": 0,
+            "sample_interval_seconds": 2
+          }
+        },
+        {
+          "case": "r4000_q50",
+          "offered_events_per_second": 4000,
+          "offered_read_qps": 50,
+          "offered_rows": 120000,
+          "completed_rows": 120000,
+          "writer_elapsed_seconds": 43.188,
+          "achieved_events_per_second": 2778.54,
+          "writer_drain_seconds": 13.188,
+          "batch_latency": {
+            "count": 120,
+            "p50_ms": 340.167,
+            "p95_ms": 394.765,
+            "p99_ms": 423.415,
+            "max_ms": 427.065
+          },
+          "first_lookup_latency": {
+            "count": 120,
+            "p50_ms": 66.09,
+            "p95_ms": 94.808,
+            "p99_ms": 111.847,
+            "max_ms": 111.949
+          },
+          "read_latency": {
+            "count": 1500,
+            "p50_ms": 6.167,
+            "p95_ms": 13.466,
+            "p99_ms": 21.769,
+            "max_ms": 36.815
+          },
+          "read_requests": {
+            "offered": 1500,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "read",
+              "queries": 1500,
+              "server_p95_ms": 5,
+              "max_query_memory_bytes": 7879921,
+              "read_rows": 3518862,
+              "query_cpu_seconds": 5.111974
+            },
+            {
+              "operation": "insert",
+              "queries": 720,
+              "server_p95_ms": 87,
+              "max_query_memory_bytes": 4775877,
+              "read_rows": 240000,
+              "query_cpu_seconds": 0.226463
+            },
+            {
+              "operation": "lookup",
+              "queries": 600,
+              "server_p95_ms": 15,
+              "max_query_memory_bytes": 9708502,
+              "read_rows": 131232306,
+              "query_cpu_seconds": 6.997604
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 229819,
+                "expected": 229819,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1264000,
+            "expected_raw_rows": 1264000
+          },
+          "passed": false,
+          "observed_resources": {
+            "cpu_quota_percent_mean": 25.066,
+            "cpu_quota_percent_max": 34.76,
+            "cgroup_memory_used_max_bytes": 755288048,
+            "active_parts_start": 43,
+            "active_parts_end": 44,
+            "replication_queue_max": 1,
+            "sample_interval_seconds": 2
+          }
+        }
+      ],
+      "final_storage": [
+        {
+          "parts": 51,
+          "bytes_on_disk": 142112707,
+          "compressed_bytes": 141571564,
+          "physical_rows": 2415536
+        }
+      ]
+    },
+    {
+      "database": "a7_capacity_20260928_090324_e7a00556",
+      "profile_label": "local-2cpu-shared-vm-4GiB-server-budget-batch2000",
+      "benchmark_source_sha256": "45573051535e5744d7b67edaffab226b00b3b3ba78baacdab202d35966000f6e",
+      "server": [
+        {
+          "version": "26.9.4.3",
+          "hostname": "clickhouse",
+          "timezone": "UTC"
+        }
+      ],
+      "parameters": {
+        "profile_label": "local-2cpu-shared-vm-4GiB-server-budget-batch2000",
+        "seed_rows": 1144000,
+        "seed_batch_size": 10000,
+        "batch_size": 2000,
+        "products": 2000,
+        "hot_percent": 50,
+        "rates": [
+          4000
+        ],
+        "read_qps": [
+          50
+        ],
+        "read_workers": 64,
+        "duration": 30.0,
+        "read_p95_ms": 1000,
+        "allowed_drain_seconds": 1.0,
+        "max_drain_seconds": 30,
+        "sample_interval": 2,
+        "max_threads": 2,
+        "timeout": 90,
+        "first_event_check": true,
+        "store_raw": true,
+        "cleanup": true,
+        "output": "/Users/a451349/projects/clickhouse-lab/examples/shopping-journey/cluster/a7-event-replacing_summary-count/a7-1-cumulative-summary/capacity-results"
+      },
+      "seed_seconds": 45.063,
+      "seed_correctness": {
+        "passed": true,
+        "summary_mismatches": [],
+        "final_counts": [
+          {
+            "event": "VIEW",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "CART",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "CLICK",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "PURCHASE",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "NOTIFY",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          }
+        ],
+        "raw_rows": 1144000,
+        "expected_raw_rows": 1144000
+      },
+      "database_removed": true,
+      "cases": [
+        {
+          "case": "r4000_q50",
+          "offered_events_per_second": 4000,
+          "offered_read_qps": 50,
+          "offered_rows": 120000,
+          "completed_rows": 120000,
+          "writer_elapsed_seconds": 30.395,
+          "achieved_events_per_second": 3948.08,
+          "writer_drain_seconds": 0.395,
+          "batch_latency": {
+            "count": 60,
+            "p50_ms": 356.371,
+            "p95_ms": 384.334,
+            "p99_ms": 404.629,
+            "max_ms": 404.629
+          },
+          "first_lookup_latency": {
+            "count": 60,
+            "p50_ms": 69.503,
+            "p95_ms": 87.768,
+            "p99_ms": 113.84,
+            "max_ms": 113.84
+          },
+          "oldest_event_to_batch_commit_latency": {
+            "count": 60,
+            "p50_ms": 879.182,
+            "p95_ms": 908.032,
+            "p99_ms": 925.231,
+            "max_ms": 925.231
+          },
+          "read_latency": {
+            "count": 1500,
+            "p50_ms": 6.358,
+            "p95_ms": 13.365,
+            "p99_ms": 24.234,
+            "max_ms": 57.686
+          },
+          "read_requests": {
+            "offered": 1500,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "read",
+              "queries": 1500,
+              "server_p95_ms": 5,
+              "max_query_memory_bytes": 7785761,
+              "read_rows": 4066501,
+              "query_cpu_seconds": 5.135705
+            },
+            {
+              "operation": "insert",
+              "queries": 360,
+              "server_p95_ms": 86,
+              "max_query_memory_bytes": 5824101,
+              "read_rows": 240000,
+              "query_cpu_seconds": 0.132016
+            },
+            {
+              "operation": "lookup",
+              "queries": 300,
+              "server_p95_ms": 15,
+              "max_query_memory_bytes": 16775717,
+              "read_rows": 65571435,
+              "query_cpu_seconds": 4.131979
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 229819,
+                "expected": 229819,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1264000,
+            "expected_raw_rows": 1264000
+          },
+          "passed": true,
+          "observed_resources": {
+            "cpu_quota_percent_mean": 26.061,
+            "cpu_quota_percent_max": 29.989,
+            "cgroup_memory_used_max_bytes": 812315944,
+            "active_parts_start": 37,
+            "active_parts_end": 44,
+            "replication_queue_max": 1,
+            "sample_interval_seconds": 2
+          }
+        }
+      ],
+      "final_storage": [
+        {
+          "parts": 46,
+          "bytes_on_disk": 142062996,
+          "compressed_bytes": 141498505,
+          "physical_rows": 2415805
+        }
+      ]
+    }
+  ]
+}

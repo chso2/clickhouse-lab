@@ -15,6 +15,8 @@
 
 ## 설계 목적
 
+현재 beta의 `r7i.large`를 유지할 수 있는지 확인하는 [용량·동시 부하 시험](./a7-1-cumulative-summary/CAPACITY.md)을 추가했습니다. 원본 저장, 최초 이벤트 판정, 이벤트 INSERT/MV, 동시 summary 조회와 독립 정확성 검사를 함께 측정하며 인스턴스 증설은 이 결과와 실제 AWS 자원 지표로 결정합니다.
+
 A7은 하나의 넓은 dedup aggregate state를 조회할 때 발생한 `argMinMerge` 비용을 줄이기 위한 후보입니다. VIEW·CART·CLICK·PURCHASE·NOTIFY를 이벤트별 테이블로 나누고, 서비스 조회는 작은 summary에서 처리합니다.
 
 ![A7 쇼핑몰 구매 여정 집계 아키텍처](../../docs/event-summary-architecture.svg)
