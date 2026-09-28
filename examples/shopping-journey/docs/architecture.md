@@ -51,14 +51,18 @@ RDS 배치와 summary 갱신은 별도 케이스이며 아직 구현되지 않�
 
 아래 그림은 [A7](../cluster/a7-event-replacing_summary-count/README.md)에서 검증할 구조입니다. 이벤트 종류별로 최초 구매 여정 이벤트를 관리하고, 누적 지표와 시간 지표를 ClickHouse 내부 Summary로 제공합니다.
 
+현재 구현된 A7-1은 이 그림 중 이벤트별 ReplacingMergeTree와 누적 숫자 Summary까지만 포함합니다. 시간 Summary와 보정 경로는 A7-1 결과를 기준으로 후속 검증합니다.
+
 ![쇼핑몰 구매 여정 집계 아키텍처](./event-summary-architecture.svg)
 
 - `view_event`, `cart_event`, `click_event`, `purchase_event`, `notification_event`는 상품·여정별 가장 빠른 이벤트를 선택하는 `ReplacingMergeTree`입니다.
-- 행동 이벤트의 누적값은 `uniqExactState(journey_id)`로 중복을 제거합니다.
+- 입력 처리기는 이벤트 종류별 `(product_id, journey_id)`가 처음 등록될 때 누적 증가량인 `count_delta=1`을 전달하고, 이후 후보에는 0을 전달합니다.
+- 행동 이벤트의 누적값은 `count_delta > 0`인 입력을 `sum(count_delta)`와 `SummingMergeTree`로 합산합니다.
+- `ReplacingMergeTree`는 `first_version`으로 최초 발생 시각의 상세 행을 선택하지만, background merge 결과가 MV를 다시 실행하지는 않습니다. 따라서 `count_delta`의 멱등성과 동시성 제어는 입력 처리기의 책임입니다.
 - S3에서 이미 집계되어 들어오는 `notification_count`는 여정 단위 unique 계산을 거치지 않고 발송 지표 상태에 직접 합산합니다.
 - `notification_raw`는 고객 그룹과 최초 발생 시각처럼 여정 단위 정보가 필요한 조회 경로에 사용합니다. 같은 발송을 `notification_count`와 `notification_raw` 양쪽에서 누적 합산하지 않습니다.
 - 최초 발생 시각 기준 시간 지표는 변경된 상품을 `FINAL`로 다시 계산하고, 더 높은 `summary_version`으로 시간 Summary에 기록합니다.
-- Summary의 집계 키에는 `journey_id`를 넣지 않습니다. 누적 Summary에서만 aggregate state 내부 중복 제거 값으로 사용합니다.
+- Summary의 집계 키와 저장 열에는 `journey_id`를 넣지 않습니다. `journey_id`는 입력 단계의 최초 이벤트 판정과 이벤트 상세 테이블에서만 사용합니다.
 
 ## 전체 참고 구조
 
