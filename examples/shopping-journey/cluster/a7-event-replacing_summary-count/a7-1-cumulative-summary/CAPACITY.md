@@ -14,7 +14,7 @@
 
 ## 실행
 
-Python 표준 라이브러리만 사용합니다. 대상은 반드시 별도의 시험 배포로 지정합니다. 기존 `shop_a7_1`/`shop_benchmark`를 변경하지 않고 실행별 `a7_capacity_*` DB를 만듭니다. 생성한 DB만 `--cleanup`으로 정리할 수 있습니다. 오류가 나면 DB를 유지하고 보고서에 오류를 기록합니다.
+Python 표준 라이브러리만 사용합니다. 대상은 반드시 별도의 시험 배포로 지정합니다. 기존 `shop_a7_1`/`shop_benchmark`를 변경하지 않고 실행별 `a7_capacity_*` DB를 만듭니다. 생성한 DB만 `--cleanup`으로 정리할 수 있습니다. 실행 중 예외가 나면 DB를 유지하고 보고서에 오류를 기록합니다. 모든 단계 수집이 완료되면 `--cleanup`은 부하 기준 불합격 여부와 관계없이 이번 실행 DB만 제거하며 보고서는 유지합니다.
 
 ```bash
 python3 -B examples/shopping-journey/cluster/a7-event-replacing_summary-count/a7-1-cumulative-summary/benchmark-capacity.py \

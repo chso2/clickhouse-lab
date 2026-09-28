@@ -1,0 +1,2307 @@
+{
+  "date": "2026-09-28",
+  "implementation_base_commit": "56653f3",
+  "scope": "Local preliminary A7-2 measurements; not AWS r7i.large capacity certification",
+  "environment": {
+    "context": "kind-clickhouse-lab",
+    "isolated_namespace": "a7-capacity",
+    "architecture": "arm64",
+    "shards": 1,
+    "replicas": 1,
+    "keeper_pods": 1,
+    "clickhouse_cpu_limit": 2,
+    "clickhouse_pod_memory_limit_bytes": 17179869184,
+    "clickhouse_server_memory_limit_bytes": 4294967296,
+    "storage": "emptyDir on shared local VM",
+    "clickhouse_image_digest": "docker.io/clickhouse/clickhouse-server@sha256:317c280a2334651a54b3e07201c2de4c09588b8e66e64f719cee26d0f434ca81",
+    "keeper_image_digest": "docker.io/clickhouse/clickhouse-keeper@sha256:3a2651415cccdfbbdcdd84cc755109c07eae49a75c90511547053752d9f67af7"
+  },
+  "runs": [
+    {
+      "database": "a7_capacity_20260928_104759_b6bebd0c",
+      "scope": "synthetic single-shard A7-2; not an AWS capacity guarantee",
+      "benchmark_source_sha256": "54c5a262a02356a9e1603490c39761918131642cdb48e6fba6e98644f06186b5",
+      "profile_label": "local-arm64-2cpu-shared-vm-ch-server-memory-4Gi",
+      "parameters": {
+        "reconcile_interval": 5,
+        "reconcile_products": [
+          1,
+          2
+        ],
+        "profile_label": "local-arm64-2cpu-shared-vm-ch-server-memory-4Gi",
+        "seed_rows": 1000000,
+        "seed_batch_size": 10000,
+        "batch_size": 2000,
+        "products": 2000,
+        "hot_percent": 50,
+        "rates": [
+          400,
+          4000
+        ],
+        "read_qps": [
+          10,
+          50
+        ],
+        "read_workers": 64,
+        "duration": 30.0,
+        "read_p95_ms": 1000,
+        "allowed_drain_seconds": 1.0,
+        "max_drain_seconds": 30,
+        "sample_interval": 2,
+        "max_threads": 2,
+        "timeout": 90,
+        "first_event_check": true,
+        "store_raw": true,
+        "cleanup": true
+      },
+      "source_sha256": {
+        "a7-event-replacing_summary-count/a7-1-cumulative-summary/benchmark-capacity.py": "edc113e0423ef6c1216400f7ed17bc6a46af0182f314610371c02cdc2c51c54e",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/benchmark-capacity.py": "54c5a262a02356a9e1603490c39761918131642cdb48e6fba6e98644f06186b5",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/schema.sql": "a1acddaa8d67c8220aed909fef0b37f6aae962850d42ea93d3586ff66363d3a3",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/backfill-from-a7-1.sql": "d752aba6cbfb4b1920f9169a31a739ece0ff776c7f9483bef66132bccf88bf06",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/reconcile-product.sql": "d190026058005c6394e8a19e34814628d51d03845b296219c319b476638c0563",
+        "a7-event-replacing_summary-count/a7-1-cumulative-summary/schema.sql": "0d371ef8640915024d0541d23b40c5e93ed967beacc2d61a5e2783c4a99c8307",
+        "common/schema.sql": "e1628ddc3e80efeafbd7d599cab5bf82adfd4970c1031de92cc7b0b1e84f89e3"
+      },
+      "server": [
+        {
+          "version": "26.9.4.3",
+          "hostname": "clickhouse",
+          "timezone": "UTC"
+        }
+      ],
+      "cluster": [
+        {
+          "shard_num": 1,
+          "replica_num": 1,
+          "host_name": "127.0.0.1"
+        }
+      ],
+      "settings": [
+        {
+          "name": "max_threads",
+          "value": "auto(2)"
+        },
+        {
+          "name": "insert_quorum",
+          "value": "0"
+        },
+        {
+          "name": "max_memory_usage",
+          "value": "2000000000"
+        },
+        {
+          "name": "async_insert",
+          "value": "1"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "late_first_moves_hour_total_stays_one",
+          "passed": true
+        },
+        {
+          "name": "same_message_same_token_retry_once",
+          "passed": true
+        },
+        {
+          "name": "two_writers_same_key_2_then_reconcile_1",
+          "passed": true,
+          "reconcile_ms": 22.141
+        },
+        {
+          "name": "source_and_state_committed_missing_delta_repaired",
+          "passed": true
+        }
+      ],
+      "seed_seconds": 45.812,
+      "a7_2_backfill_seconds": 0.487,
+      "seed_correctness": {
+        "passed": true,
+        "summary_mismatches": [],
+        "final_counts": [
+          {
+            "event": "VIEW",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "CART",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "CLICK",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "PURCHASE",
+            "actual": 181818,
+            "expected": 181818,
+            "passed": true
+          },
+          {
+            "event": "NOTIFY",
+            "actual": 181819,
+            "expected": 181819,
+            "passed": true
+          }
+        ],
+        "raw_rows": 1000000,
+        "expected_raw_rows": 1000000,
+        "hourly_mismatches_before_final_reconcile": [],
+        "hourly_mismatch_count_before_final_reconcile": 0,
+        "final_reconcile_requests": [],
+        "final_reconcile_total_seconds": 0,
+        "hourly_mismatches": [],
+        "state_key_time_mismatches": 0,
+        "hourly_correct": true,
+        "state_correct": true
+      },
+      "storage": [
+        {
+          "table": "notification_events_local",
+          "physical_rows": 229819,
+          "compressed_bytes": 17879418,
+          "bytes_on_disk": 17955484
+        },
+        {
+          "table": "view_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17831526,
+          "bytes_on_disk": 17898217
+        },
+        {
+          "table": "cumulative_summary_local",
+          "physical_rows": 2892,
+          "compressed_bytes": 48839,
+          "bytes_on_disk": 73923
+        },
+        {
+          "table": "purchase_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17842650,
+          "bytes_on_disk": 17935901
+        },
+        {
+          "table": "cart_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17836624,
+          "bytes_on_disk": 17929969
+        },
+        {
+          "table": "click_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17822593,
+          "bytes_on_disk": 17871235
+        },
+        {
+          "table": "shopping_events_local",
+          "physical_rows": 1264000,
+          "compressed_bytes": 53919461,
+          "bytes_on_disk": 54013068
+        },
+        {
+          "table": "first_event_state_local",
+          "physical_rows": 1149091,
+          "compressed_bytes": 33448622,
+          "bytes_on_disk": 33548270
+        },
+        {
+          "table": "hourly_summary_local",
+          "physical_rows": 182946,
+          "compressed_bytes": 2245414,
+          "bytes_on_disk": 2326308
+        }
+      ],
+      "all_cases_passed": false,
+      "database_removed": true,
+      "raw_report_sha256": "ffc889469526a0de1aea6643a867e1130702f5eb17b0063bee9b0c2bae61896b",
+      "cases": [
+        {
+          "case": "r400_q10",
+          "offered_events_per_second": 400,
+          "offered_read_qps": 10,
+          "offered_rows": 12000,
+          "completed_rows": 12000,
+          "writer_elapsed_seconds": 30.724,
+          "achieved_events_per_second": 390.57,
+          "writer_drain_seconds": 0.724,
+          "batch_latency": {
+            "count": 6,
+            "p50_ms": 705.25,
+            "p95_ms": 768.486,
+            "p99_ms": 768.486,
+            "max_ms": 768.486
+          },
+          "first_lookup_latency": {
+            "count": 6,
+            "p50_ms": 53.97,
+            "p95_ms": 106.07,
+            "p99_ms": 106.07,
+            "max_ms": 106.07
+          },
+          "oldest_event_to_batch_commit_latency": {
+            "count": 6,
+            "p50_ms": 5727.25,
+            "p95_ms": 5792.355,
+            "p99_ms": 5792.355,
+            "max_ms": 5792.355
+          },
+          "read_latency": {
+            "count": 300,
+            "p50_ms": 12.207,
+            "p95_ms": 20.967,
+            "p99_ms": 24.403,
+            "max_ms": 44.676
+          },
+          "read_requests": {
+            "offered": 300,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "reconcile",
+              "queries": 12,
+              "server_p95_ms": 80,
+              "max_query_memory_bytes": 62739845,
+              "read_rows": 5070593,
+              "query_cpu_seconds": 0.599326
+            },
+            {
+              "operation": "read",
+              "queries": 300,
+              "server_p95_ms": 14,
+              "max_query_memory_bytes": 8635111,
+              "read_rows": 7602673,
+              "query_cpu_seconds": 2.641346
+            },
+            {
+              "operation": "insert",
+              "queries": 48,
+              "server_p95_ms": 255,
+              "max_query_memory_bytes": 5825973,
+              "read_rows": 39396,
+              "query_cpu_seconds": 0.018428
+            },
+            {
+              "operation": "lookup",
+              "queries": 6,
+              "server_p95_ms": 101,
+              "max_query_memory_bytes": 42135088,
+              "read_rows": 5574640,
+              "query_cpu_seconds": 0.525407
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 184000,
+                "expected": 184000,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1012000,
+            "expected_raw_rows": 1012000,
+            "hourly_mismatches_before_final_reconcile": [
+              {
+                "product": 1,
+                "hour": "2026-07-06 22:00:00",
+                "event": "NOTIFY",
+                "expected": 56,
+                "actual": 57
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-06 04:00:00",
+                "event": "PURCHASE",
+                "expected": 51,
+                "actual": 52
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-09 06:00:00",
+                "event": "VIEW",
+                "expected": 39,
+                "actual": 40
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-29 03:00:00",
+                "event": "CLICK",
+                "expected": 55,
+                "actual": 56
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-27 03:00:00",
+                "event": "CART",
+                "expected": 37,
+                "actual": 38
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-01 03:00:00",
+                "event": "PURCHASE",
+                "expected": 46,
+                "actual": 47
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-01 19:00:00",
+                "event": "VIEW",
+                "expected": 41,
+                "actual": 42
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-06 09:00:00",
+                "event": "VIEW",
+                "expected": 44,
+                "actual": 46
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-30 20:00:00",
+                "event": "VIEW",
+                "expected": 45,
+                "actual": 46
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-09 08:00:00",
+                "event": "NOTIFY",
+                "expected": 52,
+                "actual": 53
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-26 16:00:00",
+                "event": "CLICK",
+                "expected": 46,
+                "actual": 47
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-08 17:00:00",
+                "event": "CLICK",
+                "expected": 47,
+                "actual": 48
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-10 19:00:00",
+                "event": "NOTIFY",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-15 03:00:00",
+                "event": "CLICK",
+                "expected": 46,
+                "actual": 47
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-13 07:00:00",
+                "event": "VIEW",
+                "expected": 36,
+                "actual": 37
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-10 06:00:00",
+                "event": "VIEW",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-29 11:00:00",
+                "event": "CART",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-31 20:00:00",
+                "event": "PURCHASE",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-15 21:00:00",
+                "event": "PURCHASE",
+                "expected": 49,
+                "actual": 50
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-16 20:00:00",
+                "event": "CART",
+                "expected": 41,
+                "actual": 42
+              }
+            ],
+            "hourly_mismatch_count_before_final_reconcile": 559,
+            "final_reconcile_requests": [
+              {
+                "product": 1,
+                "seconds": 0.07894374999999343
+              }
+            ],
+            "final_reconcile_total_seconds": 0.079,
+            "hourly_mismatches": [],
+            "state_key_time_mismatches": 0,
+            "hourly_correct": true,
+            "state_correct": true
+          },
+          "passed": true,
+          "reconciliation": {
+            "scope": "specified products only; not all changed-product backlog",
+            "products": [
+              1,
+              2
+            ],
+            "interval_seconds": 5,
+            "requests": [
+              {
+                "product": 1,
+                "seconds": 0.07793554199999875
+              },
+              {
+                "product": 2,
+                "seconds": 0.06309220900000412
+              },
+              {
+                "product": 1,
+                "seconds": 0.08007966600000316
+              },
+              {
+                "product": 2,
+                "seconds": 0.023468457999996417
+              },
+              {
+                "product": 1,
+                "seconds": 0.08112570800000185
+              },
+              {
+                "product": 2,
+                "seconds": 0.026396625000003837
+              },
+              {
+                "product": 1,
+                "seconds": 0.08265045800000337
+              },
+              {
+                "product": 2,
+                "seconds": 0.019942166999996402
+              },
+              {
+                "product": 1,
+                "seconds": 0.08283470799999293
+              },
+              {
+                "product": 2,
+                "seconds": 0.019686665999998354
+              },
+              {
+                "product": 1,
+                "seconds": 0.08156716600001346
+              },
+              {
+                "product": 2,
+                "seconds": 0.021985250000000178
+              }
+            ],
+            "latency": {
+              "count": 12,
+              "p50_ms": 63.092,
+              "p95_ms": 82.835,
+              "p99_ms": 82.835,
+              "max_ms": 82.835
+            }
+          },
+          "resource_summary": {
+            "sample_count": 16,
+            "sample_interval_seconds": 2,
+            "cpu_percent_of_cgroup_quota_mean": 11.555,
+            "cpu_percent_of_cgroup_quota_max": 32.236,
+            "cgroup_memory_bytes_max": 1042375688,
+            "resident_memory_bytes_max": 1573158912,
+            "active_parts_first": 56,
+            "active_parts_last": 72,
+            "active_parts_max": 72,
+            "replication_queue_max": 4,
+            "replication_delay_seconds_max": 0,
+            "monitor_errors": []
+          }
+        },
+        {
+          "case": "r4000_q10",
+          "offered_events_per_second": 4000,
+          "offered_read_qps": 10,
+          "offered_rows": 120000,
+          "completed_rows": 120000,
+          "writer_elapsed_seconds": 41.336,
+          "achieved_events_per_second": 2903.06,
+          "writer_drain_seconds": 11.336,
+          "batch_latency": {
+            "count": 60,
+            "p50_ms": 649.594,
+            "p95_ms": 788.776,
+            "p99_ms": 896.384,
+            "max_ms": 896.384
+          },
+          "first_lookup_latency": {
+            "count": 60,
+            "p50_ms": 59.759,
+            "p95_ms": 76.19,
+            "p99_ms": 114.838,
+            "max_ms": 114.838
+          },
+          "oldest_event_to_batch_commit_latency": {
+            "count": 60,
+            "p50_ms": 6230.308,
+            "p95_ms": 11251.232,
+            "p99_ms": 11835.478,
+            "max_ms": 11835.478
+          },
+          "read_latency": {
+            "count": 300,
+            "p50_ms": 10.502,
+            "p95_ms": 18.247,
+            "p99_ms": 31.81,
+            "max_ms": 41.305
+          },
+          "read_requests": {
+            "offered": 300,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "reconcile",
+              "queries": 16,
+              "server_p95_ms": 85,
+              "max_query_memory_bytes": 66572457,
+              "read_rows": 7120313,
+              "query_cpu_seconds": 0.814748
+            },
+            {
+              "operation": "read",
+              "queries": 300,
+              "server_p95_ms": 11,
+              "max_query_memory_bytes": 8651911,
+              "read_rows": 7741281,
+              "query_cpu_seconds": 2.145173
+            },
+            {
+              "operation": "insert",
+              "queries": 480,
+              "server_p95_ms": 286,
+              "max_query_memory_bytes": 5825957,
+              "read_rows": 393805,
+              "query_cpu_seconds": 0.170664
+            },
+            {
+              "operation": "lookup",
+              "queries": 60,
+              "server_p95_ms": 73,
+              "max_query_memory_bytes": 33302405,
+              "read_rows": 59181514,
+              "query_cpu_seconds": 5.898507
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 205818,
+                "expected": 205818,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 205819,
+                "expected": 205819,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1132000,
+            "expected_raw_rows": 1132000,
+            "hourly_mismatches_before_final_reconcile": [
+              {
+                "product": 1,
+                "hour": "2026-06-03 09:00:00",
+                "event": "VIEW",
+                "expected": 45,
+                "actual": 46
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-18 21:00:00",
+                "event": "VIEW",
+                "expected": 44,
+                "actual": 46
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-14 06:00:00",
+                "event": "VIEW",
+                "expected": 47,
+                "actual": 48
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-25 08:00:00",
+                "event": "VIEW",
+                "expected": 54,
+                "actual": 55
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-27 17:00:00",
+                "event": "VIEW",
+                "expected": 52,
+                "actual": 53
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-12 18:00:00",
+                "event": "VIEW",
+                "expected": 49,
+                "actual": 50
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-23 16:00:00",
+                "event": "VIEW",
+                "expected": 45,
+                "actual": 46
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-30 21:00:00",
+                "event": "VIEW",
+                "expected": 48,
+                "actual": 49
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-02 11:00:00",
+                "event": "VIEW",
+                "expected": 45,
+                "actual": 46
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-22 11:00:00",
+                "event": "VIEW",
+                "expected": 49,
+                "actual": 50
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-19 08:00:00",
+                "event": "VIEW",
+                "expected": 50,
+                "actual": 51
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-08 00:00:00",
+                "event": "VIEW",
+                "expected": 55,
+                "actual": 56
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-14 08:00:00",
+                "event": "VIEW",
+                "expected": 46,
+                "actual": 47
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-14 17:00:00",
+                "event": "VIEW",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-07 07:00:00",
+                "event": "VIEW",
+                "expected": 47,
+                "actual": 48
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-21 15:00:00",
+                "event": "VIEW",
+                "expected": 70,
+                "actual": 71
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-17 05:00:00",
+                "event": "VIEW",
+                "expected": 53,
+                "actual": 54
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-09 17:00:00",
+                "event": "VIEW",
+                "expected": 46,
+                "actual": 47
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-18 22:00:00",
+                "event": "VIEW",
+                "expected": 46,
+                "actual": 47
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-05 07:00:00",
+                "event": "VIEW",
+                "expected": 49,
+                "actual": 50
+              }
+            ],
+            "hourly_mismatch_count_before_final_reconcile": 179,
+            "final_reconcile_requests": [
+              {
+                "product": 1,
+                "seconds": 0.11426654199999575
+              },
+              {
+                "product": 2,
+                "seconds": 0.03194050000000459
+              }
+            ],
+            "final_reconcile_total_seconds": 0.146,
+            "hourly_mismatches": [],
+            "state_key_time_mismatches": 0,
+            "hourly_correct": true,
+            "state_correct": true
+          },
+          "passed": false,
+          "reconciliation": {
+            "scope": "specified products only; not all changed-product backlog",
+            "products": [
+              1,
+              2
+            ],
+            "interval_seconds": 5,
+            "requests": [
+              {
+                "product": 1,
+                "seconds": 0.07100137500000869
+              },
+              {
+                "product": 2,
+                "seconds": 0.020987833000006617
+              },
+              {
+                "product": 1,
+                "seconds": 0.08489387500000589
+              },
+              {
+                "product": 2,
+                "seconds": 0.02206883300000584
+              },
+              {
+                "product": 1,
+                "seconds": 0.0874422079999988
+              },
+              {
+                "product": 2,
+                "seconds": 0.02523104200000148
+              },
+              {
+                "product": 1,
+                "seconds": 0.0843314580000083
+              },
+              {
+                "product": 2,
+                "seconds": 0.022085833999994975
+              },
+              {
+                "product": 1,
+                "seconds": 0.08535358299999984
+              },
+              {
+                "product": 2,
+                "seconds": 0.024291292000000908
+              },
+              {
+                "product": 1,
+                "seconds": 0.08179704200000515
+              },
+              {
+                "product": 2,
+                "seconds": 0.022326958000007835
+              },
+              {
+                "product": 1,
+                "seconds": 0.08666241699999944
+              },
+              {
+                "product": 2,
+                "seconds": 0.02183641700000294
+              },
+              {
+                "product": 1,
+                "seconds": 0.08824083400000404
+              },
+              {
+                "product": 2,
+                "seconds": 0.040101750000005154
+              }
+            ],
+            "latency": {
+              "count": 16,
+              "p50_ms": 40.102,
+              "p95_ms": 88.241,
+              "p99_ms": 88.241,
+              "max_ms": 88.241
+            }
+          },
+          "resource_summary": {
+            "sample_count": 21,
+            "sample_interval_seconds": 2,
+            "cpu_percent_of_cgroup_quota_mean": 18.008,
+            "cpu_percent_of_cgroup_quota_max": 30.364,
+            "cgroup_memory_bytes_max": 923256856,
+            "resident_memory_bytes_max": 1456623616,
+            "active_parts_first": 57,
+            "active_parts_last": 69,
+            "active_parts_max": 75,
+            "replication_queue_max": 3,
+            "replication_delay_seconds_max": 0,
+            "monitor_errors": []
+          }
+        },
+        {
+          "case": "r400_q50",
+          "offered_events_per_second": 400,
+          "offered_read_qps": 50,
+          "offered_rows": 12000,
+          "completed_rows": 12000,
+          "writer_elapsed_seconds": 30.64,
+          "achieved_events_per_second": 391.65,
+          "writer_drain_seconds": 0.64,
+          "batch_latency": {
+            "count": 6,
+            "p50_ms": 674.794,
+            "p95_ms": 749.548,
+            "p99_ms": 749.548,
+            "max_ms": 749.548
+          },
+          "first_lookup_latency": {
+            "count": 6,
+            "p50_ms": 75.91,
+            "p95_ms": 122.774,
+            "p99_ms": 122.774,
+            "max_ms": 122.774
+          },
+          "oldest_event_to_batch_commit_latency": {
+            "count": 6,
+            "p50_ms": 5697.605,
+            "p95_ms": 5768.774,
+            "p99_ms": 5768.774,
+            "max_ms": 5768.774
+          },
+          "read_latency": {
+            "count": 1500,
+            "p50_ms": 9.032,
+            "p95_ms": 13.625,
+            "p99_ms": 23.468,
+            "max_ms": 43.641
+          },
+          "read_requests": {
+            "offered": 1500,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "insert",
+              "queries": 48,
+              "server_p95_ms": 238,
+              "max_query_memory_bytes": 5825957,
+              "read_rows": 39378,
+              "query_cpu_seconds": 0.018619
+            },
+            {
+              "operation": "lookup",
+              "queries": 6,
+              "server_p95_ms": 114,
+              "max_query_memory_bytes": 33298771,
+              "read_rows": 6328307,
+              "query_cpu_seconds": 0.701496
+            },
+            {
+              "operation": "reconcile",
+              "queries": 11,
+              "server_p95_ms": 88,
+              "max_query_memory_bytes": 68003724,
+              "read_rows": 5186310,
+              "query_cpu_seconds": 0.586335
+            },
+            {
+              "operation": "read",
+              "queries": 1500,
+              "server_p95_ms": 8,
+              "max_query_memory_bytes": 8957862,
+              "read_rows": 38268527,
+              "query_cpu_seconds": 9.577274
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 208000,
+                "expected": 208000,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1144000,
+            "expected_raw_rows": 1144000,
+            "hourly_mismatches_before_final_reconcile": [
+              {
+                "product": 1,
+                "hour": "2026-06-07 13:00:00",
+                "event": "CART",
+                "expected": 56,
+                "actual": 57
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-01 19:00:00",
+                "event": "VIEW",
+                "expected": 48,
+                "actual": 49
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-25 13:00:00",
+                "event": "CLICK",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-03 13:00:00",
+                "event": "CART",
+                "expected": 48,
+                "actual": 49
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-25 09:00:00",
+                "event": "NOTIFY",
+                "expected": 53,
+                "actual": 55
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-16 13:00:00",
+                "event": "CLICK",
+                "expected": 57,
+                "actual": 58
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-02 11:00:00",
+                "event": "NOTIFY",
+                "expected": 53,
+                "actual": 54
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-24 23:00:00",
+                "event": "CLICK",
+                "expected": 41,
+                "actual": 42
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-28 00:00:00",
+                "event": "NOTIFY",
+                "expected": 39,
+                "actual": 40
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-09 09:00:00",
+                "event": "PURCHASE",
+                "expected": 49,
+                "actual": 50
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-02 04:00:00",
+                "event": "CART",
+                "expected": 48,
+                "actual": 49
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-15 06:00:00",
+                "event": "PURCHASE",
+                "expected": 42,
+                "actual": 43
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-08 00:00:00",
+                "event": "VIEW",
+                "expected": 56,
+                "actual": 57
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-10 14:00:00",
+                "event": "PURCHASE",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-09 05:00:00",
+                "event": "VIEW",
+                "expected": 50,
+                "actual": 51
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-14 09:00:00",
+                "event": "VIEW",
+                "expected": 57,
+                "actual": 58
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-13 12:00:00",
+                "event": "VIEW",
+                "expected": 38,
+                "actual": 39
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-26 05:00:00",
+                "event": "NOTIFY",
+                "expected": 53,
+                "actual": 54
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-03 09:00:00",
+                "event": "PURCHASE",
+                "expected": 51,
+                "actual": 52
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-03 08:00:00",
+                "event": "CART",
+                "expected": 40,
+                "actual": 41
+              }
+            ],
+            "hourly_mismatch_count_before_final_reconcile": 251,
+            "final_reconcile_requests": [
+              {
+                "product": 1,
+                "seconds": 0.08545774999998912
+              }
+            ],
+            "final_reconcile_total_seconds": 0.085,
+            "hourly_mismatches": [],
+            "state_key_time_mismatches": 0,
+            "hourly_correct": true,
+            "state_correct": true
+          },
+          "passed": true,
+          "reconciliation": {
+            "scope": "specified products only; not all changed-product backlog",
+            "products": [
+              1,
+              2
+            ],
+            "interval_seconds": 5,
+            "requests": [
+              {
+                "product": 1,
+                "seconds": 0.09105720799999517
+              },
+              {
+                "product": 2,
+                "seconds": 0.029288500000006934
+              },
+              {
+                "product": 1,
+                "seconds": 0.06981774999999857
+              },
+              {
+                "product": 2,
+                "seconds": 0.021071916000011015
+              },
+              {
+                "product": 1,
+                "seconds": 0.08290595799999778
+              },
+              {
+                "product": 2,
+                "seconds": 0.023902875000004542
+              },
+              {
+                "product": 1,
+                "seconds": 0.07951483400000825
+              },
+              {
+                "product": 2,
+                "seconds": 0.021532207999996444
+              },
+              {
+                "product": 1,
+                "seconds": 0.09106437500000197
+              },
+              {
+                "product": 2,
+                "seconds": 0.020836166999998795
+              },
+              {
+                "product": 1,
+                "seconds": 0.08327812499999254
+              },
+              {
+                "product": 2,
+                "seconds": 0.02989354099997854
+              }
+            ],
+            "latency": {
+              "count": 12,
+              "p50_ms": 29.894,
+              "p95_ms": 91.064,
+              "p99_ms": 91.064,
+              "max_ms": 91.064
+            }
+          },
+          "resource_summary": {
+            "sample_count": 16,
+            "sample_interval_seconds": 2,
+            "cpu_percent_of_cgroup_quota_mean": 23.605,
+            "cpu_percent_of_cgroup_quota_max": 41.818,
+            "cgroup_memory_bytes_max": 1034010328,
+            "resident_memory_bytes_max": 1569136640,
+            "active_parts_first": 74,
+            "active_parts_last": 63,
+            "active_parts_max": 74,
+            "replication_queue_max": 1,
+            "replication_delay_seconds_max": 0,
+            "monitor_errors": []
+          }
+        },
+        {
+          "case": "r4000_q50",
+          "offered_events_per_second": 4000,
+          "offered_read_qps": 50,
+          "offered_rows": 120000,
+          "completed_rows": 120000,
+          "writer_elapsed_seconds": 42.372,
+          "achieved_events_per_second": 2832.07,
+          "writer_drain_seconds": 12.372,
+          "batch_latency": {
+            "count": 60,
+            "p50_ms": 676.252,
+            "p95_ms": 853.798,
+            "p99_ms": 870.41,
+            "max_ms": 870.41
+          },
+          "first_lookup_latency": {
+            "count": 60,
+            "p50_ms": 74.512,
+            "p95_ms": 98.363,
+            "p99_ms": 154.852,
+            "max_ms": 154.852
+          },
+          "oldest_event_to_batch_commit_latency": {
+            "count": 60,
+            "p50_ms": 6944.251,
+            "p95_ms": 12429.483,
+            "p99_ms": 12871.606,
+            "max_ms": 12871.606
+          },
+          "read_latency": {
+            "count": 1500,
+            "p50_ms": 9.895,
+            "p95_ms": 19.411,
+            "p99_ms": 31.259,
+            "max_ms": 56.31
+          },
+          "read_requests": {
+            "offered": 1500,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "reconcile",
+              "queries": 16,
+              "server_p95_ms": 133,
+              "max_query_memory_bytes": 49944170,
+              "read_rows": 6723531,
+              "query_cpu_seconds": 0.734407
+            },
+            {
+              "operation": "read",
+              "queries": 1500,
+              "server_p95_ms": 10,
+              "max_query_memory_bytes": 8957448,
+              "read_rows": 38864655,
+              "query_cpu_seconds": 10.646732
+            },
+            {
+              "operation": "insert",
+              "queries": 480,
+              "server_p95_ms": 292,
+              "max_query_memory_bytes": 5825973,
+              "read_rows": 393817,
+              "query_cpu_seconds": 0.173642
+            },
+            {
+              "operation": "lookup",
+              "queries": 60,
+              "server_p95_ms": 109,
+              "max_query_memory_bytes": 33414862,
+              "read_rows": 66781170,
+              "query_cpu_seconds": 7.411946
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 229819,
+                "expected": 229819,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1264000,
+            "expected_raw_rows": 1264000,
+            "hourly_mismatches_before_final_reconcile": [
+              {
+                "product": 1,
+                "hour": "2026-07-08 23:00:00",
+                "event": "CART",
+                "expected": 54,
+                "actual": 55
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-08 03:00:00",
+                "event": "CLICK",
+                "expected": 52,
+                "actual": 53
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-10 07:00:00",
+                "event": "NOTIFY",
+                "expected": 55,
+                "actual": 56
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-03 17:00:00",
+                "event": "VIEW",
+                "expected": 58,
+                "actual": 59
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-30 07:00:00",
+                "event": "PURCHASE",
+                "expected": 42,
+                "actual": 43
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-25 19:00:00",
+                "event": "VIEW",
+                "expected": 68,
+                "actual": 69
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-12 00:00:00",
+                "event": "NOTIFY",
+                "expected": 37,
+                "actual": 38
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-09 01:00:00",
+                "event": "PURCHASE",
+                "expected": 53,
+                "actual": 54
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-22 16:00:00",
+                "event": "VIEW",
+                "expected": 52,
+                "actual": 53
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-06 13:00:00",
+                "event": "PURCHASE",
+                "expected": 56,
+                "actual": 57
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-30 20:00:00",
+                "event": "VIEW",
+                "expected": 51,
+                "actual": 52
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-07 05:00:00",
+                "event": "VIEW",
+                "expected": 64,
+                "actual": 65
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-23 23:00:00",
+                "event": "VIEW",
+                "expected": 37,
+                "actual": 38
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-10 18:00:00",
+                "event": "PURCHASE",
+                "expected": 50,
+                "actual": 51
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-03 13:00:00",
+                "event": "CART",
+                "expected": 58,
+                "actual": 59
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-25 09:00:00",
+                "event": "NOTIFY",
+                "expected": 56,
+                "actual": 57
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-29 17:00:00",
+                "event": "CLICK",
+                "expected": 50,
+                "actual": 51
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-23 10:00:00",
+                "event": "PURCHASE",
+                "expected": 55,
+                "actual": 56
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-21 05:00:00",
+                "event": "NOTIFY",
+                "expected": 43,
+                "actual": 44
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-27 22:00:00",
+                "event": "CLICK",
+                "expected": 48,
+                "actual": 49
+              }
+            ],
+            "hourly_mismatch_count_before_final_reconcile": 823,
+            "final_reconcile_requests": [
+              {
+                "product": 1,
+                "seconds": 0.11705524999999284
+              }
+            ],
+            "final_reconcile_total_seconds": 0.117,
+            "hourly_mismatches": [],
+            "state_key_time_mismatches": 0,
+            "hourly_correct": true,
+            "state_correct": true
+          },
+          "passed": false,
+          "reconciliation": {
+            "scope": "specified products only; not all changed-product backlog",
+            "products": [
+              1,
+              2
+            ],
+            "interval_seconds": 5,
+            "requests": [
+              {
+                "product": 1,
+                "seconds": 0.07514262500001223
+              },
+              {
+                "product": 2,
+                "seconds": 0.03469895899999642
+              },
+              {
+                "product": 1,
+                "seconds": 0.07938679199997978
+              },
+              {
+                "product": 2,
+                "seconds": 0.023652374999983294
+              },
+              {
+                "product": 1,
+                "seconds": 0.07501391599998897
+              },
+              {
+                "product": 2,
+                "seconds": 0.02090662499998075
+              },
+              {
+                "product": 1,
+                "seconds": 0.1373276670000223
+              },
+              {
+                "product": 2,
+                "seconds": 0.020838916999991852
+              },
+              {
+                "product": 1,
+                "seconds": 0.08250770900002635
+              },
+              {
+                "product": 2,
+                "seconds": 0.024075250000009873
+              },
+              {
+                "product": 1,
+                "seconds": 0.06422312500001226
+              },
+              {
+                "product": 2,
+                "seconds": 0.02202241699998808
+              },
+              {
+                "product": 1,
+                "seconds": 0.06432999999998401
+              },
+              {
+                "product": 2,
+                "seconds": 0.03315995900001667
+              },
+              {
+                "product": 1,
+                "seconds": 0.0812138750000031
+              },
+              {
+                "product": 2,
+                "seconds": 0.019339542000011534
+              }
+            ],
+            "latency": {
+              "count": 16,
+              "p50_ms": 34.699,
+              "p95_ms": 137.328,
+              "p99_ms": 137.328,
+              "max_ms": 137.328
+            }
+          },
+          "resource_summary": {
+            "sample_count": 21,
+            "sample_interval_seconds": 2,
+            "cpu_percent_of_cgroup_quota_mean": 34.472,
+            "cpu_percent_of_cgroup_quota_max": 49.391,
+            "cgroup_memory_bytes_max": 1045145464,
+            "resident_memory_bytes_max": 1301950464,
+            "active_parts_first": 67,
+            "active_parts_last": 72,
+            "active_parts_max": 72,
+            "replication_queue_max": 1,
+            "replication_delay_seconds_max": 0,
+            "monitor_errors": []
+          }
+        }
+      ]
+    },
+    {
+      "database": "a7_capacity_20260928_110820_4e13c2ca",
+      "scope": "synthetic single-shard A7-2; not an AWS capacity guarantee",
+      "benchmark_source_sha256": "54c5a262a02356a9e1603490c39761918131642cdb48e6fba6e98644f06186b5",
+      "profile_label": "local-arm64-2cpu-shared-vm-ch-server-memory-4Gi",
+      "parameters": {
+        "reconcile_interval": 5,
+        "reconcile_products": [
+          1,
+          2
+        ],
+        "profile_label": "local-arm64-2cpu-shared-vm-ch-server-memory-4Gi",
+        "seed_rows": 1144000,
+        "seed_batch_size": 10000,
+        "batch_size": 5000,
+        "products": 2000,
+        "hot_percent": 50,
+        "rates": [
+          4000
+        ],
+        "read_qps": [
+          50
+        ],
+        "read_workers": 64,
+        "duration": 30.0,
+        "read_p95_ms": 1000,
+        "allowed_drain_seconds": 1.0,
+        "max_drain_seconds": 30,
+        "sample_interval": 2,
+        "max_threads": 2,
+        "timeout": 90,
+        "first_event_check": true,
+        "store_raw": true,
+        "cleanup": true
+      },
+      "source_sha256": {
+        "a7-event-replacing_summary-count/a7-1-cumulative-summary/benchmark-capacity.py": "edc113e0423ef6c1216400f7ed17bc6a46af0182f314610371c02cdc2c51c54e",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/benchmark-capacity.py": "54c5a262a02356a9e1603490c39761918131642cdb48e6fba6e98644f06186b5",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/schema.sql": "a1acddaa8d67c8220aed909fef0b37f6aae962850d42ea93d3586ff66363d3a3",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/backfill-from-a7-1.sql": "d752aba6cbfb4b1920f9169a31a739ece0ff776c7f9483bef66132bccf88bf06",
+        "a7-event-replacing_summary-count/a7-2-hourly-summary/reconcile-product.sql": "d190026058005c6394e8a19e34814628d51d03845b296219c319b476638c0563",
+        "a7-event-replacing_summary-count/a7-1-cumulative-summary/schema.sql": "0d371ef8640915024d0541d23b40c5e93ed967beacc2d61a5e2783c4a99c8307",
+        "common/schema.sql": "e1628ddc3e80efeafbd7d599cab5bf82adfd4970c1031de92cc7b0b1e84f89e3"
+      },
+      "server": [
+        {
+          "version": "26.9.4.3",
+          "hostname": "clickhouse",
+          "timezone": "UTC"
+        }
+      ],
+      "cluster": [
+        {
+          "shard_num": 1,
+          "replica_num": 1,
+          "host_name": "127.0.0.1"
+        }
+      ],
+      "settings": [
+        {
+          "name": "max_threads",
+          "value": "auto(2)"
+        },
+        {
+          "name": "insert_quorum",
+          "value": "0"
+        },
+        {
+          "name": "max_memory_usage",
+          "value": "2000000000"
+        },
+        {
+          "name": "async_insert",
+          "value": "1"
+        }
+      ],
+      "contracts": [
+        {
+          "name": "late_first_moves_hour_total_stays_one",
+          "passed": true
+        },
+        {
+          "name": "same_message_same_token_retry_once",
+          "passed": true
+        },
+        {
+          "name": "two_writers_same_key_2_then_reconcile_1",
+          "passed": true,
+          "reconcile_ms": 28.754
+        },
+        {
+          "name": "source_and_state_committed_missing_delta_repaired",
+          "passed": true
+        }
+      ],
+      "seed_seconds": 37.141,
+      "a7_2_backfill_seconds": 0.718,
+      "seed_correctness": {
+        "passed": true,
+        "summary_mismatches": [],
+        "final_counts": [
+          {
+            "event": "VIEW",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "CART",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "CLICK",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "PURCHASE",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          },
+          {
+            "event": "NOTIFY",
+            "actual": 208000,
+            "expected": 208000,
+            "passed": true
+          }
+        ],
+        "raw_rows": 1144000,
+        "expected_raw_rows": 1144000,
+        "hourly_mismatches_before_final_reconcile": [],
+        "hourly_mismatch_count_before_final_reconcile": 0,
+        "final_reconcile_requests": [],
+        "final_reconcile_total_seconds": 0,
+        "hourly_mismatches": [],
+        "state_key_time_mismatches": 0,
+        "hourly_correct": true,
+        "state_correct": true
+      },
+      "storage": [
+        {
+          "table": "notification_events_local",
+          "physical_rows": 229819,
+          "compressed_bytes": 17885828,
+          "bytes_on_disk": 17982186
+        },
+        {
+          "table": "view_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17840070,
+          "bytes_on_disk": 17929193
+        },
+        {
+          "table": "cumulative_summary_local",
+          "physical_rows": 3683,
+          "compressed_bytes": 56633,
+          "bytes_on_disk": 80878
+        },
+        {
+          "table": "purchase_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17838673,
+          "bytes_on_disk": 17928099
+        },
+        {
+          "table": "cart_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17828722,
+          "bytes_on_disk": 17905460
+        },
+        {
+          "table": "click_events_local",
+          "physical_rows": 229818,
+          "compressed_bytes": 17831178,
+          "bytes_on_disk": 17907969
+        },
+        {
+          "table": "shopping_events_local",
+          "physical_rows": 1264000,
+          "compressed_bytes": 53990624,
+          "bytes_on_disk": 54126389
+        },
+        {
+          "table": "first_event_state_local",
+          "physical_rows": 1149091,
+          "compressed_bytes": 33464697,
+          "bytes_on_disk": 33511867
+        },
+        {
+          "table": "hourly_summary_local",
+          "physical_rows": 184155,
+          "compressed_bytes": 2261693,
+          "bytes_on_disk": 2330405
+        }
+      ],
+      "all_cases_passed": true,
+      "database_removed": true,
+      "raw_report_sha256": "0099f08243cc7a198c5d82610b80030379d2db6faac490acf46fd713b1c77359",
+      "cases": [
+        {
+          "case": "r4000_q50",
+          "offered_events_per_second": 4000,
+          "offered_read_qps": 50,
+          "offered_rows": 120000,
+          "completed_rows": 120000,
+          "writer_elapsed_seconds": 30.889,
+          "achieved_events_per_second": 3884.87,
+          "writer_drain_seconds": 0.889,
+          "batch_latency": {
+            "count": 24,
+            "p50_ms": 769.84,
+            "p95_ms": 897.159,
+            "p99_ms": 966.453,
+            "max_ms": 966.453
+          },
+          "first_lookup_latency": {
+            "count": 24,
+            "p50_ms": 88.51,
+            "p95_ms": 131.072,
+            "p99_ms": 145.707,
+            "max_ms": 145.707
+          },
+          "oldest_event_to_batch_commit_latency": {
+            "count": 24,
+            "p50_ms": 2054.337,
+            "p95_ms": 2181.241,
+            "p99_ms": 2255.952,
+            "max_ms": 2255.952
+          },
+          "read_latency": {
+            "count": 1500,
+            "p50_ms": 9.629,
+            "p95_ms": 21.517,
+            "p99_ms": 39.079,
+            "max_ms": 57.886
+          },
+          "read_requests": {
+            "offered": 1500,
+            "dropped": 0
+          },
+          "errors": [],
+          "query_log": [
+            {
+              "operation": "insert",
+              "queries": 192,
+              "server_p95_ms": 288,
+              "max_query_memory_bytes": 9975621,
+              "read_rows": 392356,
+              "query_cpu_seconds": 0.107567
+            },
+            {
+              "operation": "lookup",
+              "queries": 24,
+              "server_p95_ms": 122,
+              "max_query_memory_bytes": 76503727,
+              "read_rows": 26962335,
+              "query_cpu_seconds": 3.040724
+            },
+            {
+              "operation": "reconcile",
+              "queries": 12,
+              "server_p95_ms": 118,
+              "max_query_memory_bytes": 51821618,
+              "read_rows": 5187317,
+              "query_cpu_seconds": 0.586973
+            },
+            {
+              "operation": "read",
+              "queries": 1500,
+              "server_p95_ms": 10,
+              "max_query_memory_bytes": 8934292,
+              "read_rows": 41204101,
+              "query_cpu_seconds": 10.478881
+            }
+          ],
+          "correctness": {
+            "passed": true,
+            "summary_mismatches": [],
+            "final_counts": [
+              {
+                "event": "VIEW",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CART",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "CLICK",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "PURCHASE",
+                "actual": 229818,
+                "expected": 229818,
+                "passed": true
+              },
+              {
+                "event": "NOTIFY",
+                "actual": 229819,
+                "expected": 229819,
+                "passed": true
+              }
+            ],
+            "raw_rows": 1264000,
+            "expected_raw_rows": 1264000,
+            "hourly_mismatches_before_final_reconcile": [
+              {
+                "product": 1,
+                "hour": "2026-08-26 12:00:00",
+                "event": "VIEW",
+                "expected": 79,
+                "actual": 81
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-18 10:00:00",
+                "event": "VIEW",
+                "expected": 57,
+                "actual": 58
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-29 07:00:00",
+                "event": "VIEW",
+                "expected": 57,
+                "actual": 58
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-03 03:00:00",
+                "event": "CLICK",
+                "expected": 47,
+                "actual": 48
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-23 02:00:00",
+                "event": "VIEW",
+                "expected": 49,
+                "actual": 50
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-16 06:00:00",
+                "event": "PURCHASE",
+                "expected": 53,
+                "actual": 54
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-17 04:00:00",
+                "event": "CART",
+                "expected": 57,
+                "actual": 58
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-20 07:00:00",
+                "event": "CLICK",
+                "expected": 64,
+                "actual": 66
+              },
+              {
+                "product": 1,
+                "hour": "2026-06-28 12:00:00",
+                "event": "CART",
+                "expected": 51,
+                "actual": 53
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-10 18:00:00",
+                "event": "CLICK",
+                "expected": 51,
+                "actual": 52
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-15 19:00:00",
+                "event": "NOTIFY",
+                "expected": 73,
+                "actual": 74
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-26 12:00:00",
+                "event": "PURCHASE",
+                "expected": 78,
+                "actual": 80
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-09 21:00:00",
+                "event": "CLICK",
+                "expected": 51,
+                "actual": 52
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-01 23:00:00",
+                "event": "CLICK",
+                "expected": 51,
+                "actual": 52
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-15 23:00:00",
+                "event": "NOTIFY",
+                "expected": 59,
+                "actual": 60
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-10 12:00:00",
+                "event": "VIEW",
+                "expected": 66,
+                "actual": 67
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-12 08:00:00",
+                "event": "VIEW",
+                "expected": 61,
+                "actual": 63
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-06 02:00:00",
+                "event": "NOTIFY",
+                "expected": 57,
+                "actual": 58
+              },
+              {
+                "product": 1,
+                "hour": "2026-07-26 01:00:00",
+                "event": "PURCHASE",
+                "expected": 62,
+                "actual": 63
+              },
+              {
+                "product": 1,
+                "hour": "2026-08-08 02:00:00",
+                "event": "NOTIFY",
+                "expected": 49,
+                "actual": 50
+              }
+            ],
+            "hourly_mismatch_count_before_final_reconcile": 2007,
+            "final_reconcile_requests": [
+              {
+                "product": 1,
+                "seconds": 0.12623974999999632
+              }
+            ],
+            "final_reconcile_total_seconds": 0.126,
+            "hourly_mismatches": [],
+            "state_key_time_mismatches": 0,
+            "hourly_correct": true,
+            "state_correct": true
+          },
+          "passed": true,
+          "reconciliation": {
+            "scope": "specified products only; not all changed-product backlog",
+            "products": [
+              1,
+              2
+            ],
+            "interval_seconds": 5,
+            "requests": [
+              {
+                "product": 1,
+                "seconds": 0.05430862500000444
+              },
+              {
+                "product": 2,
+                "seconds": 0.027356292000000337
+              },
+              {
+                "product": 1,
+                "seconds": 0.12367249999999785
+              },
+              {
+                "product": 2,
+                "seconds": 0.041438124999999104
+              },
+              {
+                "product": 1,
+                "seconds": 0.04259133299999718
+              },
+              {
+                "product": 2,
+                "seconds": 0.024104000000001236
+              },
+              {
+                "product": 1,
+                "seconds": 0.0828648749999985
+              },
+              {
+                "product": 2,
+                "seconds": 0.019132917000000305
+              },
+              {
+                "product": 1,
+                "seconds": 0.09237400000000662
+              },
+              {
+                "product": 2,
+                "seconds": 0.02113404199999991
+              },
+              {
+                "product": 1,
+                "seconds": 0.07707949999999641
+              },
+              {
+                "product": 2,
+                "seconds": 0.020212000000000785
+              }
+            ],
+            "latency": {
+              "count": 12,
+              "p50_ms": 41.438,
+              "p95_ms": 123.672,
+              "p99_ms": 123.672,
+              "max_ms": 123.672
+            }
+          },
+          "resource_summary": {
+            "sample_count": 16,
+            "sample_interval_seconds": 2,
+            "cpu_percent_of_cgroup_quota_mean": 31.699,
+            "cpu_percent_of_cgroup_quota_max": 44.773,
+            "cgroup_memory_bytes_max": 1084447312,
+            "resident_memory_bytes_max": 1306234880,
+            "active_parts_first": 52,
+            "active_parts_last": 54,
+            "active_parts_max": 69,
+            "replication_queue_max": 0,
+            "replication_delay_seconds_max": 0,
+            "monitor_errors": []
+          }
+        }
+      ]
+    }
+  ],
+  "shared_harness_regression": {
+    "database": "a7_capacity_20260928_111207_614d8a65",
+    "scope": "A7-1 small regression after shared scheduler/parser/fixture hook changes",
+    "seed_rows": 1000,
+    "benchmark_source_sha256": "edc113e0423ef6c1216400f7ed17bc6a46af0182f314610371c02cdc2c51c54e",
+    "seed_correctness_passed": true,
+    "all_cases_passed": true,
+    "database_removed": true,
+    "cases": [
+      {
+        "case": "r400_q10",
+        "offered_events_per_second": 400,
+        "offered_read_qps": 10,
+        "offered_rows": 1200,
+        "completed_rows": 1200,
+        "writer_elapsed_seconds": 3.291,
+        "achieved_events_per_second": 364.66,
+        "writer_drain_seconds": 0.291,
+        "batch_latency": {
+          "count": 6,
+          "p50_ms": 275.29,
+          "p95_ms": 290.425,
+          "p99_ms": 290.425,
+          "max_ms": 290.425
+        },
+        "first_lookup_latency": {
+          "count": 6,
+          "p50_ms": 20.537,
+          "p95_ms": 21.587,
+          "p99_ms": 21.587,
+          "max_ms": 21.587
+        },
+        "oldest_event_to_batch_commit_latency": {
+          "count": 6,
+          "p50_ms": 781.038,
+          "p95_ms": 797.231,
+          "p99_ms": 797.231,
+          "max_ms": 797.231
+        },
+        "read_latency": {
+          "count": 30,
+          "p50_ms": 6.07,
+          "p95_ms": 14.742,
+          "p99_ms": 17.008,
+          "max_ms": 17.008
+        },
+        "read_requests": {
+          "offered": 30,
+          "dropped": 0
+        },
+        "errors": [],
+        "correctness": {
+          "passed": true,
+          "summary_mismatches": [],
+          "final_counts": [
+            {
+              "event": "VIEW",
+              "actual": 400,
+              "expected": 400,
+              "passed": true
+            },
+            {
+              "event": "CART",
+              "actual": 400,
+              "expected": 400,
+              "passed": true
+            },
+            {
+              "event": "CLICK",
+              "actual": 400,
+              "expected": 400,
+              "passed": true
+            },
+            {
+              "event": "PURCHASE",
+              "actual": 400,
+              "expected": 400,
+              "passed": true
+            },
+            {
+              "event": "NOTIFY",
+              "actual": 400,
+              "expected": 400,
+              "passed": true
+            }
+          ],
+          "raw_rows": 2200,
+          "expected_raw_rows": 2200
+        },
+        "passed": true
+      }
+    ]
+  }
+}

@@ -140,9 +140,7 @@ class Benchmark:
             product = (1 if placement_hash % 100 < self.args.hot_percent
                        else 2 + placement_hash % (self.args.products - 1))
             index = canonical % 5
-            occurred = epoch + datetime.timedelta(seconds=journey % (90 * 86400))
-            if canonical != ordinal:
-                occurred -= datetime.timedelta(seconds=60)
+            occurred = self.event_time(ordinal, canonical, epoch)
             row = {"message_id": hashlib.sha256(f"message-{ordinal}".encode()).hexdigest()[:32],
                    "mall_id": product % 10, "store_id": product % 100,
                    "product_id": product, "journey_id": digest[:32],
@@ -152,6 +150,12 @@ class Benchmark:
             raw.append(dict(row, event_kind=KINDS[index]))
             grouped[index].append((ordinal, canonical, row))
         return grouped, raw
+
+    def event_time(self, ordinal, canonical, epoch):
+        occurred = epoch + datetime.timedelta(seconds=(canonical // 5) % (90 * 86400))
+        if canonical != ordinal:
+            occurred -= datetime.timedelta(seconds=60)
+        return occurred
 
     @staticmethod
     def payload(rows):
@@ -315,7 +319,8 @@ class Benchmark:
         wall_seconds = max(self.args.duration, write_finished - started)
         self.client.execute("SYSTEM FLUSH LOGS")
         query_log = self.client.rows(
-            "SELECT if(position(query_id,'_read_')>0,'read',if(position(query_id,'_lookup_')>0,'lookup','insert')) AS operation,"
+            "SELECT multiIf(position(query_id,'_read_')>0,'read',position(query_id,'_lookup_')>0,'lookup',"
+            "position(query_id,'_reconcile_')>0,'reconcile','insert') AS operation,"
             "count() AS queries,quantileExact(.95)(query_duration_ms) AS server_p95_ms,"
             "max(memory_usage) AS max_query_memory_bytes,sum(read_rows) AS read_rows,"
             "sum(ProfileEvents['UserTimeMicroseconds']+ProfileEvents['SystemTimeMicroseconds'])/1000000 AS query_cpu_seconds "
@@ -367,8 +372,8 @@ class Benchmark:
         return 0 if self.report["all_cases_passed"] else 1
 
 
-def arguments():
-    parser = argparse.ArgumentParser(description=__doc__)
+def arguments(parser=None):
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True, help="Explicit HTTP endpoint of the isolated single-shard test server")
     parser.add_argument("--profile-label", required=True, help="Observed instance/Pod resource configuration, not an inferred equivalence")
     parser.add_argument("--user", default="default")
