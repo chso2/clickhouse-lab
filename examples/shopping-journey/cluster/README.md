@@ -12,16 +12,16 @@
 | [a4-dedup-count](./a4-dedup-count/README.md) | dedup → 직접 count | dedup → 직접 count |
 | [a5-dedup_summary-count](./a5-dedup_summary-count/README.md) | dedup → summary → count | dedup → summary → count |
 | [a6-event-hll_dedup_summary-count](./a6-event-hll_dedup_summary-count/README.md) | event → HLL | dedup → summary → count |
-| [a7-event-replacing_summary-count](./a7-event-replacing_summary-count/README.md) | A7-1 이벤트별 Replacing → `count_delta` 숫자 Summary | A7-1에서 제외, 후속 직접 `FINAL` 조회 후보 |
+| [a7-event-replacing_summary-count](./a7-event-replacing_summary-count/README.md) | A7-1 이벤트별 Replacing → `count_delta` 숫자 Summary | A7-2 최초 상태 → signed delta 시간 Summary → 상품 단위 보정 |
 
 ## 구현 순서
 
 1. A2·A3·A4: 정규화된 이벤트 입력부터 분산 저장·복제·상태 집계와 직접 조회를 비교.
 2. A1: RDS 배치를 연결해 기존 방식과 비교.
 3. A5·A6: dedup 기반 summary의 실시간 갱신·보정 방식이 정해진 뒤 구현.
-4. A7: A7-1 누적 summary를 먼저 구현하고, 시간 조회는 직접 `FINAL` 성능 확인 후 확장.
+4. A7: A7-1 누적 Summary를 구현하고, A7-2에서 직접 `FINAL`과 최초 상태 기반 시간 Summary를 비교한 뒤 정합성 보정을 추가.
 
-A2는 event HLL과 dedup state 직접 조회, A3는 event 원본의 shard-local exact count, A4는 dedup state 기반 전체 exact count를 구현했습니다. A7은 시간 summary를 제외하고 이벤트별 ReplacingMergeTree와 `count_delta` 기반 누적 숫자 Summary를 구현했습니다. 아래 성능값은 `GUIDE(free operator).md`의 별도 3 shard × 3 replica 구성에서 실행해 얻었습니다. 저장소의 기본 `manifests/chi.yaml`은 Altinity Operator 기반 4 shard × 3 replica 구성이므로 동일한 측정 환경이 아닙니다. A1·A5·A6과 A7의 후속 시간 조회는 현재 설계 범위만 준비한 상태입니다.
+A2는 event HLL과 dedup state 직접 조회, A3는 event 원본의 shard-local exact count, A4는 dedup state 기반 전체 exact count를 구현했습니다. A7-1은 이벤트별 ReplacingMergeTree와 `count_delta` 기반 누적 숫자 Summary, A7-2는 `first_event_state`와 signed delta 시간 Summary 및 상품 단위 보정을 구현했습니다. 아래 성능값은 `GUIDE(free operator).md`의 별도 3 shard × 3 replica 구성에서 실행해 얻었습니다. 저장소의 기본 `manifests/chi.yaml`은 Altinity Operator 기반 4 shard × 3 replica 구성이므로 동일한 측정 환경이 아닙니다. A1·A5·A6은 현재 설계 범위만 준비한 상태입니다.
 
 | 구분 | 토폴로지 | 대표 Pod 이름 | 용도 |
 |---|---|---|---|
@@ -44,7 +44,9 @@ shop_benchmark.shopping_events
   ├─ A4: dedup backfill 후 직접 count
   ├─ A5: dedup·summary backfill 후 count
   ├─ A6: event HLL / dedup·summary backfill 후 count
-  └─ A7-1: 이벤트별 Replacing / count_delta 누적 Summary
+  └─ A7
+      ├─ A7-1: 이벤트별 Replacing / count_delta 누적 Summary
+      └─ A7-2: first state / signed delta 시간 Summary / 상품 단위 보정
 ```
 
 원본 조회 성능과 파생 테이블 조회 성능은 공통 snapshot으로 비교합니다. MV 반영 지연과 원본 적재 처리량은 쓰기 경로 자체가 비교 대상이므로 A1~A7을 각각 초기화한 뒤 별도의 동일 입력으로 측정합니다. A7은 최초 이벤트 정책이 달라 결과 정확성은 전용 기대값으로 판정합니다.

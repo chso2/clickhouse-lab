@@ -170,8 +170,8 @@
   </g>
   <text x="390" y="1026" text-anchor="middle" class="name">행동 누적 Summary MV</text>
   <text x="390" y="1048" text-anchor="middle" class="small">count_delta &gt; 0 · sum(count_delta)</text>
-  <text x="1120" y="1026" text-anchor="middle" class="name">시간 Summary 갱신</text>
-  <text x="1120" y="1048" text-anchor="middle" class="small">변경 product · FINAL 재계산</text>
+  <text x="1120" y="1026" text-anchor="middle" class="name">최초 상태 비교 · 시간 delta</text>
+  <text x="1120" y="1048" text-anchor="middle" class="small">신규 +1 · 시간 이동 -1/+1 · 상품별 보정</text>
 
   <g filter="url(#shadow)">
     <rect x="650" y="995" width="200" height="70" rx="35" fill="#fff8df" stroke="#c58a31" stroke-width="2"/>
@@ -187,9 +187,9 @@
     <rect x="850" y="1110" width="540" height="32" rx="12" fill="#ad6546"/>
   </g>
   <text x="390" y="1132" text-anchor="middle" class="engine">SummingMergeTree</text>
-  <text x="1120" y="1132" text-anchor="middle" class="engine">ReplacingMergeTree(summary_version)</text>
+  <text x="1120" y="1132" text-anchor="middle" class="engine">SummingMergeTree</text>
   <text x="390" y="1174" text-anchor="middle" class="name">cumulative_summary</text>
-  <text x="1120" y="1174" text-anchor="middle" class="name">journey_metric_hourly</text>
+  <text x="1120" y="1174" text-anchor="middle" class="name">hourly_summary</text>
 
   <g class="field">
     <text x="170" y="1210">mall_id</text>
@@ -202,15 +202,15 @@
 
     <text x="890" y="1210">mall_id · store_id · product_id</text>
     <text x="890" y="1238">event_hour</text>
-    <text x="890" y="1266">summary_scope · customer_group_id</text>
+    <text x="890" y="1266">first_event_state 기준 시간 귀속</text>
     <text x="890" y="1294">notify_count · click_count</text>
     <text x="890" y="1322">view_count · cart_count</text>
     <text x="890" y="1350">purchase_count</text>
-    <text x="890" y="1378">summary_version</text>
+    <text x="890" y="1378">signed count delta</text>
   </g>
 
   <text x="390" y="1402" text-anchor="middle" class="small">최초 이벤트의 숫자 delta와 발송 Count를 상품별로 합산</text>
-  <text x="1120" y="1402" text-anchor="middle" class="small">시간대별 최신 계산값을 새 summary_version으로 저장</text>
+  <text x="1120" y="1402" text-anchor="middle" class="small">실시간 delta 반영 후 이벤트 FINAL 정답과 상품별 보정</text>
 
   <!-- Metric box -->
   <text x="800" y="1595" text-anchor="middle" class="name">쇼핑몰 지표 조회 API</text>
