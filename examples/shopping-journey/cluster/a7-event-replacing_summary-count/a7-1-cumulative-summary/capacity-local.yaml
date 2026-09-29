@@ -1,0 +1,146 @@
+# Isolated local smoke test. This is not an AWS instance or EBS emulator.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: a7-capacity
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace: a7-capacity
+data:
+  clickhouse.xml: |
+    <clickhouse>
+      <listen_host>0.0.0.0</listen_host>
+      <max_server_memory_usage>4294967296</max_server_memory_usage>
+      <background_pool_size>4</background_pool_size>
+      <background_merges_mutations_concurrency_ratio>2</background_merges_mutations_concurrency_ratio>
+      <background_schedule_pool_size>4</background_schedule_pool_size>
+      <background_fetches_pool_size>2</background_fetches_pool_size>
+      <background_move_pool_size>2</background_move_pool_size>
+      <background_common_pool_size>2</background_common_pool_size>
+      <merge_tree>
+        <number_of_free_entries_in_pool_to_execute_mutation>2</number_of_free_entries_in_pool_to_execute_mutation>
+        <number_of_free_entries_in_pool_to_execute_optimize_entire_partition>2</number_of_free_entries_in_pool_to_execute_optimize_entire_partition>
+        <number_of_free_entries_in_pool_to_lower_max_size_of_merge>2</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+      </merge_tree>
+      <remote_servers>
+        <cluster1><shard><internal_replication>true</internal_replication>
+          <replica><host>127.0.0.1</host><port>9000</port></replica>
+        </shard></cluster1>
+      </remote_servers>
+      <zookeeper><node><host>keeper</host><port>2181</port></node></zookeeper>
+      <macros><shard>capacity_01</shard><replica>capacity_01</replica></macros>
+    </clickhouse>
+  users.xml: |
+    <clickhouse><users><default>
+      <password></password>
+      <networks><ip>::/0</ip></networks>
+      <profile>default</profile><quota>default</quota>
+      <access_management>1</access_management>
+    </default></users></clickhouse>
+  keeper.xml: |
+    <clickhouse>
+      <listen_host>0.0.0.0</listen_host>
+      <logger><level>warning</level><console>true</console></logger>
+      <keeper_server>
+        <tcp_port>2181</tcp_port><server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <raft_configuration><server>
+          <id>1</id><hostname>keeper</hostname><port>9234</port>
+        </server></raft_configuration>
+      </keeper_server>
+    </clickhouse>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keeper
+  namespace: a7-capacity
+spec:
+  selector:
+    app: a7-capacity-keeper
+  ports:
+    - port: 2181
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: keeper
+  namespace: a7-capacity
+  labels:
+    app: a7-capacity-keeper
+spec:
+  containers:
+    - name: keeper
+      image: clickhouse/clickhouse-keeper:26.9.4.3
+      imagePullPolicy: IfNotPresent
+      command: [clickhouse-keeper, --config-file=/etc/capacity/keeper.xml]
+      resources:
+        requests:
+          cpu: 250m
+          memory: 128Mi
+        limits:
+          cpu: "2"
+          memory: 8Gi
+      readinessProbe:
+        tcpSocket:
+          port: 2181
+        periodSeconds: 2
+      volumeMounts:
+        - name: config
+          mountPath: /etc/capacity
+        - name: data
+          mountPath: /var/lib/clickhouse
+  volumes:
+    - name: config
+      configMap:
+        name: config
+    - name: data
+      emptyDir: {}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: clickhouse
+  namespace: a7-capacity
+  labels:
+    app: a7-capacity-clickhouse
+spec:
+  containers:
+    - name: clickhouse
+      image: clickhouse/clickhouse-server:26.9.4.3
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: CLICKHOUSE_SKIP_USER_SETUP
+          value: "1"
+      resources:
+        requests:
+          cpu: "2"
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 16Gi
+      readinessProbe:
+        httpGet:
+          path: /ping
+          port: 8123
+        initialDelaySeconds: 3
+        periodSeconds: 2
+      volumeMounts:
+        - name: config
+          mountPath: /etc/clickhouse-server/config.d/capacity.xml
+          subPath: clickhouse.xml
+        - name: config
+          mountPath: /etc/clickhouse-server/users.d/capacity.xml
+          subPath: users.xml
+        - name: data
+          mountPath: /var/lib/clickhouse
+  volumes:
+    - name: config
+      configMap:
+        name: config
+    - name: data
+      emptyDir: {}
