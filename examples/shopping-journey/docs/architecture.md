@@ -49,21 +49,30 @@ RDS 배치와 summary 갱신은 별도 케이스이며 아직 구현되지 않�
 
 ## 이벤트별 최초 데이터와 ClickHouse Summary 개선안
 
-아래 그림은 [A7](../cluster/a7-event-replacing_summary-count/README.md)에서 검증할 구조입니다. 이벤트 종류별로 최초 구매 여정 이벤트를 관리하고, 누적 지표와 시간 지표를 ClickHouse 내부 Summary로 제공합니다.
+아래 그림은 [A7](../cluster/a7-event-replacing_summary-count/README.md)의 다음 개선 검토안입니다. 이벤트 종류별로 최초 구매 여정 이벤트를 관리하고, 누적 지표와 시간 지표를 ClickHouse 내부 Summary로 제공합니다.
 
-현재 구현된 A7-1은 이벤트별 ReplacingMergeTree와 누적 숫자 Summary를 포함합니다. A7-2는 `first_event_state`에서 기존 최초 시간을 확인하고, 신규 시간 `+1` 또는 이전 시간 `-1`·신규 시간 `+1`을 signed delta 시간 Summary에 반영합니다. 동일 키 동시 입력으로 남을 수 있는 오차는 변경 상품을 이벤트 `FINAL` 정답과 비교해 보정합니다.
+현재 구현된 A7-1·A7-2와 달리 이 안은 이벤트마다 얇은 `*_first_event_state_local`을 둡니다. 이벤트 테이블의 MV가 현재 상태와 새 후보를 비교하고, 신규 키 또는 더 빠른 시간만 상태 테이블에 기록합니다. 상태 테이블의 후속 MV는 누적 Summary와 signed delta 시간 Summary를 갱신합니다.
 
-![쇼핑몰 구매 여정 집계 아키텍처](./event-summary-architecture.svg)
+![A7 이벤트별 최초 상태 개선 검토안](./a7-summary-flow.svg)
 
-- `view_event`, `cart_event`, `click_event`, `purchase_event`, `notification_event`는 상품·여정별 가장 빠른 이벤트를 선택하는 `ReplacingMergeTree`입니다.
-- 입력 처리기는 이벤트 종류별 `(product_id, journey_id)`가 처음 등록될 때 누적 증가량인 `count_delta=1`을 전달하고, 이후 후보에는 0을 전달합니다.
-- 행동 이벤트의 누적값은 `count_delta > 0`인 입력을 `sum(count_delta)`와 `SummingMergeTree`로 합산합니다.
-- `ReplacingMergeTree`는 `first_version`으로 최초 발생 시각의 상세 행을 선택하지만, background merge 결과가 MV를 다시 실행하지는 않습니다. 따라서 `count_delta`의 멱등성과 동시성 제어는 입력 처리기의 책임입니다.
+- `notification_events_local`, `view_events_local`, `cart_events_local`, `click_events_local`, `purchase_events_local`은 이벤트별 최초 후보를 저장합니다.
+- 각 이벤트에는 전용 상태 MV와 `*_first_event_state_local`이 있습니다. 상태 MV의 `WITH candidates/current_state`는 새 INSERT block과 기존 상태를 비교합니다.
+- 상태 행은 `first_occurred_at`, `previous_first_occurred_at`, `cumulative_delta`, `first_version`을 보관합니다. 신규 키는 누적 `+1`, 더 빠른 후보는 누적 변화 없이 시간 bucket을 이전 `-1`·신규 `+1`로 이동합니다.
+- 각 상태 테이블에 연결된 누적 MV와 시간 MV가 공통 `cumulative_summary_local`, `hourly_summary_local`로 숫자 delta를 보냅니다.
+- 두 Summary는 `SummingMergeTree`의 background merge 전 행과 shard별 부분 합계가 남을 수 있으므로 조회 View에서 마지막 `sum()`을 수행합니다.
+- 동일 키가 동시에 들어오면 두 MV 실행이 같은 이전 상태를 볼 수 있습니다. 이벤트 `FINAL` 정답과 현재 Summary의 차이를 signed correction delta로 기록해 수렴시킵니다.
+- 이 개선안은 아직 실행 DDL에 반영되지 않았으며, MV의 자체 상태 조회·동시 입력·대량 INSERT 비용을 별도 검증해야 합니다.
 - S3에서 이미 집계되어 들어오는 `notification_count`는 여정 단위 unique 계산을 거치지 않고 발송 지표 상태에 직접 합산합니다.
 - `notification_raw`는 고객 그룹과 최초 발생 시각처럼 여정 단위 정보가 필요한 조회 경로에 사용합니다. 같은 발송을 `notification_count`와 `notification_raw` 양쪽에서 누적 합산하지 않습니다.
 - 최초 발생 시각 기준 시간 지표는 `first_event_state` 비교 결과를 signed delta로 기록합니다. 최초 입력은 새 시간 `+1`, 시간 이동은 이전 시간 `-1`과 새 시간 `+1`입니다.
 - queue 기반 동일 키 직렬화가 없는 환경에서는 동시 판정 오차가 발생할 수 있으므로, 변경된 상품의 이벤트 `FINAL` 정답과 시간 Summary 차이를 주기적으로 보정합니다.
 - Summary의 집계 키와 저장 열에는 `journey_id`를 넣지 않습니다. `journey_id`는 입력 단계의 최초 이벤트 판정과 이벤트 상세 테이블에서만 사용합니다.
+
+### 원천부터 조회까지 전체 구조
+
+아래 그림은 위 A7 실행 구조를 Kafka·S3 원천, 파싱·정규화 단계와 조회 API까지 확장해서 보여줍니다. 상위 입력 파이프라인은 참고 구조이며 현재 실행·검증 범위는 위의 A7-1·A7-2입니다.
+
+![쇼핑몰 구매 여정 전체 집계 아키텍처](./event-summary-architecture.svg)
 
 ## 전체 참고 구조
 

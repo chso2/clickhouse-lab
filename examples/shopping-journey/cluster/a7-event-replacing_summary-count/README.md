@@ -17,24 +17,29 @@
 
 A7은 하나의 넓은 dedup aggregate state를 조회할 때 발생한 `argMinMerge` 비용을 줄이기 위한 후보입니다. VIEW·CART·CLICK·PURCHASE·NOTIFY를 이벤트별 테이블로 나누고, 서비스 조회는 작은 summary에서 처리합니다.
 
-![A7 쇼핑몰 구매 여정 집계 아키텍처](../../docs/event-summary-architecture.svg)
+![A7 이벤트별 최초 상태 개선 검토안](../../docs/a7-summary-flow.svg)
 
 ```text
-행동·클릭 입력
-  ├─ view_event
-  ├─ cart_event
-  ├─ click_event
-  └─ purchase_event
-          │  ReplacingMergeTree: 상품·여정별 가장 빠른 이벤트
-          ├─ count_delta=1만 누적 숫자 delta summary
-          └─ 변경 상품 FINAL 재계산 → 시간·고객 그룹 summary
+이벤트별 처리 경로
+*_events_local
+  → 이벤트별 상태 MV
+  → *_first_event_state_local
+       ├─ 이벤트별 누적 MV → cumulative_summary_local
+       └─ 이벤트별 시간 MV → hourly_summary_local
 
-S3 발송 입력
-  ├─ notification_count ─────────────→ 누적 summary 직접 합산
-  └─ notification_raw → notification_event → 시간·고객 그룹 summary
+상품 단위 보정
+변경 상품 → 이벤트 FINAL → expected - actual → Summary 보정 delta
 ```
 
-위 그림은 A7의 전체 후보 구조입니다. A7-1은 누적 Summary를 검증하고, A7-2는 최초 상태 비교와 signed delta를 이용한 시간 Summary 및 정합성 보정을 검증합니다.
+위 그림은 다음 단계에서 검증할 개선안입니다. 통합 상태 테이블 대신 NOTIFY·VIEW·CART·CLICK·PURCHASE마다 얇은 최초 상태 테이블을 두고, 각 상태 테이블의 MV가 공통 누적·시간 Summary로 delta를 보냅니다. 보라색 점선은 동시 판정 오차를 수렴시키는 보정 경로입니다. 이름에 `_local`이 붙은 테이블은 shard의 물리 저장소이고, `_local`이 없는 같은 이름은 클러스터용 Distributed 진입점입니다.
+
+현재 저장소에서 실행 검증한 A7-1·A7-2 SQL은 아래 절에 기록된 기존 구조입니다. 그림의 이벤트별 상태 MV, 자체 상태 조회와 동시 입력 동작은 DDL을 분리해 추가 검증해야 합니다.
+
+### 전체 입력·변환·집계 구조
+
+아래 그림은 A7 테이블만 확대한 위 그림과 달리 Kafka·S3 원천부터 파싱, ID 정규화, 이벤트별 최초 데이터, 누적·시간 Summary와 조회 API까지 전체 관계를 보여줍니다. 상위 입력 파이프라인은 참고 구조이고, 현재 저장소에서 실행·검증한 범위는 위 A7-1·A7-2 구조입니다.
+
+![쇼핑몰 구매 여정 전체 집계 아키텍처](../../docs/event-summary-architecture.svg)
 
 ## A7-1 · 시간 Summary 없는 누적 구조
 
@@ -247,6 +252,29 @@ backfill에는 공통 CLICK 중 최초 수집 행을 고르는 window 정렬 시
 ## A7-2 · 최초 상태와 signed delta 시간 Summary
 
 A7-2는 A7-1 이벤트별 테이블을 정답 원본으로 유지하면서 서비스의 시간별 조회를 작은 숫자 Summary로 분리합니다. 쇼핑몰 예제의 `product_id`는 원래 모델의 `placement_id`, `journey_id`는 `tracking_id`에 대응합니다.
+
+### MV와 `first_event_state`의 관계
+
+A7-1과 A7-2의 생성 방식은 다릅니다.
+
+```text
+A7-1 누적 Summary
+이벤트 INSERT
+  → *_events_local
+  → 이벤트별 MV 5개
+  → cumulative_summary_local에 양수 delta 추가
+
+A7-2 시간 Summary
+이벤트 수신
+  → 입력 처리기가 first_event_state FINAL 단일 키 조회
+  → 기존 최초 시간과 새 occurred_at 비교
+  → 신규·더 빠른 이벤트일 때 first_event_state에 상태 INSERT
+  → 신규면 hourly_summary에 +1, 시간 이동이면 -1/+1 INSERT
+```
+
+`first_event_state`는 MV 쿼리 안의 JOIN 조건이나 `WITH` 절이 아닙니다. `(event_type, product_id, journey_id)`별 현재 최초 시간을 유지하는 별도 `ReplicatedReplacingMergeTree` 테이블입니다. A7-2의 [schema.sql](./a7-2-hourly-summary/schema.sql)에는 `CREATE MATERIALIZED VIEW`가 없으며, 상태 조회·판정·두 종류의 INSERT는 입력 처리기의 계약입니다.
+
+일반 incremental MV는 새로 들어온 block만 처리합니다. MV에서 상태 테이블을 JOIN해도 상태 조회와 상태 변경, 시간 delta 기록이 하나의 원자적 연산이 되지 않고, 동시에 들어온 같은 키가 모두 최초라고 판단할 수 있습니다. 이 때문에 현재 설계는 처리 단계를 명시적으로 드러내고 남은 경쟁 오차를 상품 단위 보정으로 수렴시킵니다.
 
 ```text
 새 이벤트
