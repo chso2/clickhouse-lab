@@ -12,6 +12,7 @@
 | 저장 대상 | A7-1 이벤트별 Replacing·누적 Summary, A7-2 최초 상태·시간 Summary |
 | 독립 DB | `shop_a7_1`, `shop_a7_2` |
 | 현재 상태 | A7-1 누적과 A7-2 시간 Summary DDL·정확성·1차 성능 검증 완료 |
+| 혼합 정책 실험 | [최초 입수 직접 count + 교체형 signed delta](./hybrid-policy-summary/README.md) |
 
 ## 설계 목적
 
